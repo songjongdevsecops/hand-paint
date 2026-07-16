@@ -39,7 +39,7 @@ export class PaintCanvas {
     // History for undo/redo
     this.history = [];
     this.historyIndex = -1;
-    this.maxHistory = 50;
+    this.maxHistory = 20;  // Reduced from 50 — ImageData at 2x DPR can be 30+ MB each
 
     // Smoothing
     this.smoothingFactor = 0.5; // 0 = no smoothing, 1 = max
@@ -49,25 +49,41 @@ export class PaintCanvas {
     this._saveState();
     this._bindResize();
 
-    console.log('[PaintCanvas] Initialized', this.canvas.width, 'x', this.canvas.height);
+    console.log('[PaintCanvas] Initialized', this.canvas.width, 'x', this.canvas.height, '@', this.canvas.width / (this.canvas.clientWidth || 1), 'x DPR');
   }
 
   /* ---- Resize handling ---- */
 
   _bindResize() {
-    // Use ResizeObserver for efficient resize handling
-    const ro = new ResizeObserver(() => this._resize());
+    let resizeTimeout;
+    const ro = new ResizeObserver(() => {
+      // Debounce resize events
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => this._resize(), 100);
+    });
     ro.observe(this.canvas);
   }
 
   _resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2); // Cap at 2x for perf
-    const w = this.canvas.clientWidth;
-    const h = this.canvas.clientHeight;
+    let dpr = Math.min(window.devicePixelRatio || 1, 2); // Cap at 2x for perf
+    let w = this.canvas.clientWidth;
+    let h = this.canvas.clientHeight;
+
+    // Guard: don't resize to zero
+    if (w <= 0 || h <= 0) return;
+
+    // Cap internal resolution to prevent memory blowout
+    // Max ~1920x1080 at 2x = 3840x2160 internal ≈ 33 MB per snapshot
+    const MAX_INTERNAL_PX = 1920 * 1080 * 2;
+    if (w * h * dpr * dpr > MAX_INTERNAL_PX) {
+      dpr = Math.max(1, Math.sqrt(MAX_INTERNAL_PX / (w * h)));
+    }
 
     if (this.canvas.width !== w * dpr || this.canvas.height !== h * dpr) {
       // Save current canvas content before resize
-      const oldData = this.canvas.width > 0 ? this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height) : null;
+      const oldData = (this.canvas.width > 0 && this.canvas.width * this.canvas.height < 50_000_000)
+        ? this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height)
+        : null;
 
       this.canvas.width = w * dpr;
       this.canvas.height = h * dpr;
@@ -79,11 +95,15 @@ export class PaintCanvas {
 
       // Restore old content scaled to new size
       if (oldData && oldData.width > 0) {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = oldData.width;
-        tempCanvas.height = oldData.height;
-        tempCanvas.getContext('2d').putImageData(oldData, 0, 0);
-        this.ctx.drawImage(tempCanvas, 0, 0, w, h);
+        try {
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = oldData.width;
+          tempCanvas.height = oldData.height;
+          tempCanvas.getContext('2d').putImageData(oldData, 0, 0);
+          this.ctx.drawImage(tempCanvas, 0, 0, w, h);
+        } catch (e) {
+          console.warn('[PaintCanvas] Could not restore canvas after resize:', e.message);
+        }
       }
 
       console.log('[PaintCanvas] Resized to', w, 'x', h, '@', dpr, 'x');
@@ -93,13 +113,26 @@ export class PaintCanvas {
   /* ---- History management ---- */
 
   _saveState() {
+    // Safety: skip if canvas is too large (would cause memory issues)
+    const totalPx = this.canvas.width * this.canvas.height;
+    if (totalPx > 25_000_000) {
+      console.warn('[PaintCanvas] Skipping history save — canvas too large:', totalPx, 'px');
+      return;
+    }
+
     // Remove any future states if we're in the middle of history
     if (this.historyIndex < this.history.length - 1) {
       this.history = this.history.slice(0, this.historyIndex + 1);
     }
 
     // Capture current canvas state
-    const data = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    let data;
+    try {
+      data = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    } catch (e) {
+      console.warn('[PaintCanvas] Could not save state:', e.message);
+      return;
+    }
 
     this.history.push({
       imageData: data,

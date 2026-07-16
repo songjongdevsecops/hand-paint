@@ -34,10 +34,6 @@ class HandPaintApp {
     this.lastMenuToggle = 0;
     this.menuDebounceTime = 800;
 
-    // Save gesture debounce
-    this.lastSaveTime = 0;
-    this.saveDebounceTime = 1500;
-
     // Undo gesture debounce
     this.lastUndoTime = 0;
     this.undoDebounceTime = 1000;
@@ -190,11 +186,6 @@ class HandPaintApp {
         this._setGestureState('↩ Undo', '#ffd700');
         break;
 
-      case 'save':
-        this._handleSaveGesture(timestamp);
-        this._setGestureState('👍 Save', '#00ff7f');
-        break;
-
       case 'menu':
         this._handleMenuGesture(timestamp);
         this._setGestureState('🖐 Menu', '#ff8c00');
@@ -297,19 +288,6 @@ class HandPaintApp {
     if (timestamp - this.lastUndoTime > this.undoDebounceTime) {
       this._doUndo();
       this.lastUndoTime = timestamp;
-    }
-  }
-
-  _handleSaveGesture(timestamp) {
-    if (this.isDrawing) {
-      this.canvas.endStroke();
-      this.isDrawing = false;
-    }
-
-    // Debounce save
-    if (timestamp - this.lastSaveTime > this.saveDebounceTime) {
-      this._doSave();
-      this.lastSaveTime = timestamp;
     }
   }
 

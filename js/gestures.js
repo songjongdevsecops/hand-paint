@@ -49,17 +49,27 @@ export function isFingerExtended(landmarks, finger) {
   const wristToPip = distance(wrist, pip);
   const wristToMcp = distance(wrist, mcp);
 
-  // Special case for thumb: compare lateral distance too
+  // Special case for thumb: the thumb moves in a different plane than other fingers.
+  // Check if thumb tip is significantly farther from the wrist than the thumb IP joint.
+  // Also verify tip is not near the index finger (would indicate a relaxed or pinching thumb).
   if (finger.name === 'thumb') {
-    // Thumb extended if tip is far from index MCP (thumb is out to the side)
+    // Thumb is extended if tip is substantially farther from wrist than IP joint
+    const tipFromWrist = distance(wrist, tip);
+    const ipFromWrist = distance(wrist, landmarks[finger.pip]);
+    // Also check: is thumb tip away from index MCP? (abducted, not adducted)
     const indexMcp = landmarks[LM.INDEX_MCP];
     const thumbTipToIndexMcp = distance(tip, indexMcp);
     const thumbIpToIndexMcp = distance(landmarks[finger.pip], indexMcp);
-    return thumbTipToIndexMcp > thumbIpToIndexMcp * 1.05;
+    
+    // Stricter: must be clearly abducted (away from palm) AND extended
+    const isAbducted = thumbTipToIndexMcp > thumbIpToIndexMcp * 1.2;
+    const isExtended = tipFromWrist > ipFromWrist * 1.15;
+    return isAbducted && isExtended;
   }
 
-  // For other fingers: tip should be further from wrist than PIP and MCP
-  return wristToTip > wristToPip * 1.08 && wristToPip > wristToMcp * 1.02;
+  // For other fingers: tip should be further from wrist than PIP, and PIP further than MCP
+  // Increased thresholds for more reliable detection
+  return wristToTip > wristToPip * 1.12 && wristToPip > wristToMcp * 1.03;
 }
 
 /**
@@ -105,8 +115,7 @@ export function isPinching(landmarks, threshold = 0.05) {
  *   'menu'     — all 5 fingers spread → toggle menu
  *   'undo'     — only pinky extended
  *   'fist'     — no fingers extended → potentially clear
- *   'save'     — thumb only extended (thumbs up)
- *   'pinch'    — thumb + index close together → color pick / brush size
+ *   'pinch'    — thumb + index close together → brush size
  *   'unknown'  — fallback
  */
 export function classifyGesture(landmarks) {
@@ -141,12 +150,9 @@ export function classifyGesture(landmarks) {
     return { type: 'undo', data: null };
   }
 
-  // Only thumb extended → save (thumbs up check: thumb tip y < thumb mcp y)
+  // Only thumb extended → not assigned to any action (use button to save)
+  // This is explicitly ignored to prevent accidental downloads
   if (count === 1 && extended.includes('thumb')) {
-    const thumbUp = landmarks[LM.THUMB_TIP].y < landmarks[LM.THUMB_MCP].y - 0.02;
-    if (thumbUp) {
-      return { type: 'save', data: null };
-    }
     return { type: 'unknown', data: null };
   }
 
