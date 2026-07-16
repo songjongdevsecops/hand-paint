@@ -31,8 +31,6 @@ export class UI {
       btnPalette: document.getElementById('btnPalette'),
       cameraOpacitySlider: document.getElementById('cameraOpacitySlider'),
       cameraOpacityVal: document.getElementById('cameraOpacityVal'),
-      skeletonOpacitySlider: document.getElementById('skeletonOpacitySlider'),
-      skeletonOpacityVal: document.getElementById('skeletonOpacityVal'),
     };
 
     this.isPaletteOpen = false;
@@ -146,17 +144,7 @@ export class UI {
       this.el.cameraOpacityVal.textContent = Math.round(val * 100) + '%';
       cb(val);
     });
-    // Initial value
     this.el.cameraOpacityVal.textContent = '30%';
-  }
-
-  onSkeletonOpacity(cb) {
-    this.el.skeletonOpacitySlider.addEventListener('input', (e) => {
-      const val = parseFloat(e.target.value);
-      this.el.skeletonOpacityVal.textContent = Math.round(val * 100) + '%';
-      cb(val);
-    });
-    this.el.skeletonOpacityVal.textContent = '80%';
   }
 
   /* ---- Action buttons ---- */

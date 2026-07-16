@@ -113,6 +113,11 @@ class HandPaintApp {
     this.fistHoldRequired = 1500;
     this.fistCleared = false;
 
+    // Pinch + vertical brush size control
+    this.pinchActive = false;
+    this.pinchStartY = null;
+    this.pinchBaseSize = 8;
+
     // Render loop
     this._rafId = null;
   }
@@ -170,7 +175,6 @@ class HandPaintApp {
 
     // Opacity sliders
     this.ui.onCameraOpacity(val => this.engine.setCameraOpacity(val));
-    this.ui.onSkeletonOpacity(val => this.engine.setSkeletonOpacity(val));
   }
 
   /* ---- Render loop (60fps composite) ---- */
@@ -261,11 +265,9 @@ class HandPaintApp {
 
     const pos = mapToCanvas(data.position, cw, ch);
 
-    // Update brush size from gesture data
-    if (data.brushSize) {
-      this.engine.setSize(data.brushSize);
-      this.ui.setBrushSize(data.brushSize);
-    }
+    // Reset pinch state when entering paint mode
+    this.pinchActive = false;
+    this.pinchStartY = null;
 
     if (!this.isDrawing) {
       this.engine.startStroke(pos);
@@ -317,10 +319,31 @@ class HandPaintApp {
 
   _handlePinch(data) {
     if (this.isDrawing) { this.engine.endStroke(); this.isDrawing = false; }
-    if (data && data.brushSize) {
-      this.engine.setSize(data.brushSize);
-      this.ui.setBrushSize(data.brushSize);
+    if (!data || !data.position) return;
+
+    // Brush size controlled by vertical movement during pinch
+    const y = data.position.y; // Normalized 0..1 (0 = top, 1 = bottom)
+
+    if (!this.pinchActive) {
+      // Pinch just started — record starting position and base size
+      this.pinchActive = true;
+      this.pinchStartY = y;
+      this.pinchBaseSize = this.engine.brush.size;
+    } else {
+      // Moving: size = base + delta based on vertical displacement
+      // Moving UP (y decreases) = bigger brush
+      // Moving DOWN (y increases) = smaller brush
+      const deltaY = this.pinchStartY - y; // Positive = moving up
+      const sensitivity = 60; // How much Y movement affects brush size
+      const newSize = this.pinchBaseSize + deltaY * sensitivity;
+      const clamped = Math.max(2, Math.min(60, Math.round(newSize)));
+
+      this.engine.setSize(clamped);
+      this.ui.setBrushSize(clamped);
     }
+
+    // Show current size in gesture label
+    this.ui.setGesture(`🤏 ${Math.round(this.engine.brush.size)}px`, '#ff69b4');
   }
 
   /* ---- Actions ---- */

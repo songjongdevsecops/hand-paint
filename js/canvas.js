@@ -42,7 +42,6 @@ export class PaintEngine {
 
     // Opacity controls
     this.cameraOpacity = 0.3;    // 0-1, default 30%
-    this.skeletonOpacity = 0.8;  // 0-1, default 80%
 
     // Skeleton drawing callback (set by main.js)
     this.skeletonRenderer = null;
@@ -138,23 +137,16 @@ export class PaintEngine {
     // Layer 2: Paint strokes (always full opacity — paint opacity is baked in)
     ctx.drawImage(this.paintLayer, 0, 0, w, h);
 
-    // Layer 3: Hand skeleton overlay (adjustable opacity)
-    ctx.save();
-    ctx.globalAlpha = this.skeletonOpacity;
+    // Layer 3: Hand skeleton overlay (always full opacity)
     if (this.skeletonRenderer) {
       this.skeletonRenderer(ctx, w, h);
     }
-    ctx.restore();
   }
 
   /* ---- Opacity controls ---- */
 
   setCameraOpacity(val) {
     this.cameraOpacity = Math.max(0, Math.min(1, val));
-  }
-
-  setSkeletonOpacity(val) {
-    this.skeletonOpacity = Math.max(0, Math.min(1, val));
   }
 
   /* ---- History (paintLayer only) ---- */

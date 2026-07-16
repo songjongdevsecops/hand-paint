@@ -40,6 +40,11 @@ export class HandTracker {
     this._frameCount = 0;
     this._lastFpsUpdate = 0;
     this.detectionTime = 0;
+
+    // Skeleton persistence — keep rendering last known skeleton briefly after loss
+    this._lastHands = [];
+    this._skeletonFramesLeft = 0;
+    this._SKELETON_PERSIST = 15; // frames to persist after detection loss
   }
 
   async initialize(videoElement, onProgress) {
@@ -170,12 +175,25 @@ export class HandTracker {
 
   /**
    * Draw the hand skeleton overlay on the given canvas context.
+   * Persists the last known skeleton for a few frames after detection drops
+   * to prevent flickering.
    */
   drawSkeleton(ctx, w, h) {
-    if (!this.lastResults) return;
-
     const hands = this.getHands();
-    for (const hand of hands) {
+
+    // Update persistence
+    if (hands.length > 0) {
+      this._lastHands = hands;
+      this._skeletonFramesLeft = this._SKELETON_PERSIST;
+    } else if (this._skeletonFramesLeft > 0) {
+      this._skeletonFramesLeft--;
+    } else {
+      return; // Nothing to draw
+    }
+
+    const drawSet = hands.length > 0 ? hands : this._lastHands;
+
+    for (const hand of drawSet) {
       const lm = hand.landmarks;
       const isRight = hand.handedness === 'right';
 
@@ -197,22 +215,6 @@ export class HandTracker {
         ctx.arc(x, y, isRight ? 5 : 4, 0, Math.PI * 2);
         ctx.fill();
       }
-
-      // Highlight index fingertip (painting point) with white ring
-      const tip = lm[8];
-      const tipX = this._mirrorX(tip.x, w);
-      const tipY = tip.y * h;
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.arc(tipX, tipY, 8, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Inner dot at fingertip
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(tipX, tipY, 3, 0, Math.PI * 2);
-      ctx.fill();
     }
   }
 

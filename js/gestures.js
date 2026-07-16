@@ -131,12 +131,7 @@ export function classifyGesture(landmarks) {
 
   // Index finger tip position (for drawing)
   const indexTip = landmarks[LM.INDEX_TIP];
-  const middleTip = landmarks[LM.MIDDLE_TIP];
   const thumbTip = landmarks[LM.THUMB_TIP];
-  const pinkyTip = landmarks[LM.PINKY_TIP];
-
-  // Brush size from thumb-index distance
-  const brushDist = distance(thumbTip, indexTip);
 
   // --- Gesture classification ---
 
@@ -150,40 +145,24 @@ export function classifyGesture(landmarks) {
     return { type: 'undo', data: null };
   }
 
-  // Only thumb extended → not assigned to any action (use button to save)
-  // This is explicitly ignored to prevent accidental downloads
+  // Only thumb extended → not assigned (use button to save)
   if (count === 1 && extended.includes('thumb')) {
     return { type: 'unknown', data: null };
   }
 
   // Only index extended → paint
   if (count === 1 && extended.includes('index')) {
-    return {
-      type: 'paint',
-      data: {
-        position: indexTip,
-        brushSize: Math.max(1, Math.min(40, Math.round(brushDist * 100)))
-      }
-    };
+    return { type: 'paint', data: { position: indexTip } };
   }
 
-  // Index + middle extended → hover (cursor mode)
+  // Index + middle extended → hover (cursor mode, no paint)
   if (count === 2 && extended.includes('index') && extended.includes('middle')) {
-    return {
-      type: 'hover',
-      data: { position: indexTip }
-    };
+    return { type: 'hover', data: { position: indexTip } };
   }
 
-  // Pinch gesture → brush size adjustment
+  // Pinch gesture → brush size via vertical movement
   if (pinch && (extended.includes('thumb') || extended.includes('index'))) {
-    return {
-      type: 'pinch',
-      data: {
-        position: indexTip,
-        brushSize: Math.max(1, Math.min(40, Math.round(brushDist * 100)))
-      }
-    };
+    return { type: 'pinch', data: { position: indexTip } };
   }
 
   // All 5 fingers spread → menu toggle
@@ -191,20 +170,13 @@ export function classifyGesture(landmarks) {
     return { type: 'menu', data: { centroid: handCentroid(landmarks) } };
   }
 
-  // Index + middle + ring → might be "3 finger" gesture for something
+  // Index + middle + ring → menu
   if (count === 3 && extended.includes('index') && extended.includes('middle') && extended.includes('ring')) {
     return { type: 'menu', data: { centroid: handCentroid(landmarks) } };
   }
 
   // Default: unknown
-  return {
-    type: 'unknown',
-    data: {
-      position: indexTip,
-      extended,
-      brushDist
-    }
-  };
+  return { type: 'unknown', data: { position: indexTip } };
 }
 
 /**
