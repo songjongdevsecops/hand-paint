@@ -1,4 +1,4 @@
-// gestures.js — Clean gesture recognition using 3D world landmarks
+// gestures.js — Hybrid: 3D angle when available, 2D distance fallback
 
 const FINGERS = {
   thumb:  [2, 3, 4],
@@ -14,30 +14,35 @@ function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 function len(v) { return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
 function dist(a, b) { return len(sub(a, b)); }
 
-function angleDeg(a, b) {
-  const d = dot(a, b), m = len(a) * len(b);
-  if (m < 1e-10) return 180;
-  return Math.acos(Math.max(-1, Math.min(1, d / m))) * (180 / Math.PI);
-}
-
 export function getExtendedFingers(lm, wlm) {
   if (!lm || lm.length < 21) return [];
   const ex = [];
+  const wrist = lm[0];
+  // Check if we have real 3D data (z != 0)
+  const has3D = wlm && wlm[0] && typeof wlm[0].z === 'number' && Math.abs(wlm[0].z) > 0.0001;
+
   for (const [name, [mcp, pip, tip]] of Object.entries(FINGERS)) {
     if (!lm[mcp] || !lm[pip] || !lm[tip]) continue;
-    let a, b, c;
-    if (wlm && wlm[mcp] && wlm[pip] && wlm[tip]) {
-      a = v3(wlm[mcp].x, wlm[mcp].y, wlm[mcp].z);
-      b = v3(wlm[pip].x, wlm[pip].y, wlm[pip].z);
-      c = v3(wlm[tip].x, wlm[tip].y, wlm[tip].z);
+
+    if (has3D) {
+      const a = v3(wlm[mcp].x, wlm[mcp].y, wlm[mcp].z);
+      const b = v3(wlm[pip].x, wlm[pip].y, wlm[pip].z);
+      const c = v3(wlm[tip].x, wlm[tip].y, wlm[tip].z);
+      const d = dot(sub(b, a), sub(c, b));
+      const m = len(sub(b, a)) * len(sub(c, b));
+      const ang = m < 1e-10 ? 180 : Math.acos(Math.max(-1, Math.min(1, d / m))) * (180 / Math.PI);
+      if (ang > (name === 'thumb' ? 110 : 135)) ex.push(name);
     } else {
-      a = v3(lm[mcp].x, lm[mcp].y, 0);
-      b = v3(lm[pip].x, lm[pip].y, 0);
-      c = v3(lm[tip].x, lm[tip].y, 0);
+      // 2D distance-from-wrist (proven reliable)
+      const wt = dist(wrist, lm[tip]);
+      const wp = dist(wrist, lm[pip]);
+      const wm = dist(wrist, lm[mcp]);
+      if (name === 'thumb') {
+        if (dist(lm[tip], lm[5]) > dist(lm[pip], lm[5]) * 1.15) ex.push(name);
+      } else {
+        if (wt > wp * 1.08 && wp > wm * 1.02) ex.push(name);
+      }
     }
-    const ang = angleDeg(sub(b, a), sub(c, b));
-    const th = name === 'thumb' ? 110 : 135;
-    if (ang > th) ex.push(name);
   }
   return ex;
 }
