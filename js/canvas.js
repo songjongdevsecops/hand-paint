@@ -49,7 +49,7 @@ export class PaintEngine {
 
   clear() { this._save(); this.pctx.clearRect(0, 0, this.paint.width, this.paint.height); }
 
-  setColor(c) { this.brush.color = c; document.getElementById('brushDot').style.background = c; }
+  setColor(c) { this.brush.color = c; console.log('[PaintEngine] setColor:', c); document.getElementById('brushDot').style.background = c; }
   setSize(s) { this.brush.size = Math.max(2, Math.min(60, s)); document.getElementById('brushSize').textContent = Math.round(s) + 'px'; }
 
   frame() {
