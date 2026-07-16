@@ -198,7 +198,8 @@ export class HandTracker {
     const hands = this.getHands();
 
     if (hands.length > 0) {
-      this._lastHands = hands;
+      // Single hand only: prefer right, fallback to first
+      this._lastHands = [hands.find(h => h.handedness === 'right') || hands[0]];
       this._skeletonFramesLeft = this._SKELETON_PERSIST;
     } else if (this._skeletonFramesLeft > 0) {
       this._skeletonFramesLeft--;
