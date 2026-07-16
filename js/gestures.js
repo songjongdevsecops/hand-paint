@@ -27,26 +27,20 @@ export function classify(lm, wlm) {
 
   const count = [thumbUp, indexUp, middleUp, ringUp, pinkyUp].filter(Boolean).length;
 
-  // Pinch
-  if (d(lm[4], lm[8]) < 0.06) return { type: 'pinch', pos: W };
+  // No fingers = fist → clear
+  if (count === 0) return { type: 'fist' };
 
   // All 5 = menu
   if (count >= 5) return { type: 'menu' };
 
-  // Only pinky = undo
-  if (pinkyUp && !indexUp && !middleUp && !ringUp && count <= 2) return { type: 'undo' };
+  // Pinch
+  if (d(lm[4], lm[8]) < 0.06) return { type: 'pinch', pos: W };
 
-  // Only index = paint
-  if (indexUp && !middleUp && count <= 2) return { type: 'paint', pos: lm[8] };
+  // Index only or index primary = paint
+  if (indexUp) return { type: 'paint', pos: lm[8] };
 
   // Index + middle = hover
-  if (indexUp && middleUp && count <= 3) return { type: 'hover', pos: lm[8] };
-
-  // No fingers = fist
-  if (count === 0) return { type: 'fist' };
-
-  // Fallback
-  if (indexUp) return { type: 'paint', pos: lm[8] };
+  if (indexUp && middleUp) return { type: 'hover', pos: lm[8] };
 
   return { type: 'none', pos: lm[8] };
 }

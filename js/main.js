@@ -19,11 +19,11 @@ class Stabilizer {
     const cont = ['paint', 'hover', 'pinch'].includes(this.s);
     if (cont && this.exit < 8) return this.s;
     if (this.s === 'paint' && raw === 'none' && this.exit < 14) return this.s;
-    const disc = ['undo', 'menu', 'fist'].includes(raw);
+    const disc = ['fist', 'menu'].includes(raw);
     if (disc) {
       if (this.entry !== raw) { this.entry = raw; this.ec = 1; }
       else this.ec++;
-      if (this.ec < (raw === 'menu' ? 15 : 5)) return this.s;  // menu needs 15 frames hold
+      if (this.ec < (raw === 'menu' ? 5 : 8)) return this.s;  // menu 5 frames, fist 8 frames
     }
     this.s = raw; this.exit = 0; this.entry = null; this.ec = 0;
     return this.s;
@@ -49,8 +49,7 @@ class App {
     this.waveX = [];
     this.waveLast = 0;
     // Debounce
-    this.undoLast = 0;
-    this.menuLast = 0;
+    this.fistClear = 0;
   }
 
   async start() {
@@ -134,25 +133,22 @@ class App {
         this._pinch(pos);
         $('gestureLabel').textContent = '🤏 ' + Math.round(this.engine.brush.size) + 'px';
         break;
-      case 'undo':
+      case 'fist':
         if (this.drawing) { this.engine.end(); this.drawing = false; }
-        if (ts - this.undoLast > 1200) { this.engine.undo(); this.undoLast = ts; }
-        $('gestureLabel').textContent = '↩ Undo'; $('gestureLabel').style.color = '#fd0';
+        if (ts - this.fistClear > 1500) { this.engine.clear(); this.fistClear = ts; $('gestureLabel').textContent = '✊ Cleared!'; }
+        else $('gestureLabel').textContent = '✊ Fist';
+        $('gestureLabel').style.color = '#f44';
         break;
       case 'menu':
         if (this.drawing) { this.engine.end(); this.drawing = false; }
-        if (ts - this.menuLast > 2000) { $('palette').classList.toggle('hidden'); this.menuLast = ts; }
-        $('gestureLabel').textContent = '🖐 Menu'; $('gestureLabel').style.color = '#f80';
-        break;
-      case 'fist':
-        if (this.drawing) { this.engine.end(); this.drawing = false; }
-        $('gestureLabel').textContent = '✊ Fist'; $('gestureLabel').style.color = '#f44';
+        $('palette').classList.toggle('hidden');
+        $('gestureLabel').textContent = '🖐 Colors'; $('gestureLabel').style.color = '#f80';
         break;
       default:
         if (this.drawing) { this.engine.end(); this.drawing = false; }
         $('gestureLabel').textContent = '···'; $('gestureLabel').style.color = '#888';
     }
-    // Wave detection
+    // Wave = cycle color
     const h = this.tracker.getHand();
     if (h) this._wave(h.landmarks[0]);
     // Reset pinch
@@ -190,13 +186,16 @@ class App {
     }
     const amp = Math.max(...this.waveX) - Math.min(...this.waveX);
     // Show wave progress
-    if (cross >= 1) $('gestureLabel').textContent = '👋 Wave ' + cross + '/' + 3; 
+    if (cross >= 1) $('gestureLabel').textContent = '👋 Wave ' + cross + '/3'; 
     const now = performance.now();
-    if (cross >= 3 && amp > 0.04 && now - this.waveLast > 2000) {
+    if (cross >= 3 && amp > 0.04 && now - this.waveLast > 1500) {
       this.waveLast = now; this.waveX = [];
-      if (this.drawing) { this.engine.end(); this.drawing = false; }
-      this.engine.clear();
-      $('gestureLabel').textContent = '👋 Cleared!'; $('gestureLabel').style.color = '#f80';
+      const colors = ['#ff1493','#f00','#f80','#fd0','#0f0','#0ff','#08f','#00f','#80f','#fff','#000'];
+      const cur = this.engine.brush.color;
+      const idx = colors.indexOf(cur);
+      const next = colors[(idx + 1) % colors.length];
+      this.engine.setColor(next);
+      $('gestureLabel').textContent = '👋 ' + next; $('gestureLabel').style.color = next;
       setTimeout(() => { $('gestureLabel').textContent = 'Ready'; $('gestureLabel').style.color = '#ff1493'; }, 1000);
     }
   }
