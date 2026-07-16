@@ -218,11 +218,11 @@ class HandPaintApp {
   _handlePaint(data, landmarks) {
     if (!data || !data.position) return;
 
-    const pos = mapToCanvas(
-      data.position,
-      this.canvas.canvas.clientWidth,
-      this.canvas.canvas.clientHeight
-    );
+    const cw = this.canvas.canvas.clientWidth;
+    const ch = this.canvas.canvas.clientHeight;
+    if (cw <= 0 || ch <= 0) return; // Canvas not ready yet
+
+    const pos = mapToCanvas(data.position, cw, ch);
 
     // Update brush size from thumb-index distance
     if (data.brushSize) {

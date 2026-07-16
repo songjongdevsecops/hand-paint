@@ -41,8 +41,8 @@ export class PaintCanvas {
     this.historyIndex = -1;
     this.maxHistory = 20;  // Reduced from 50 — ImageData at 2x DPR can be 30+ MB each
 
-    // Smoothing
-    this.smoothingFactor = 0.5; // 0 = no smoothing, 1 = max
+    // Smoothing — lower = more responsive, higher = more lag
+    this.smoothingFactor = 0.3; // 0 = no smoothing, 1 = max
 
     // Setup canvas size
     this._resize();
