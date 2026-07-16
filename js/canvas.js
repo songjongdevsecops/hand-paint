@@ -49,7 +49,7 @@ export class PaintEngine {
 
   clear() { this._save(); this.pctx.clearRect(0, 0, this.paint.width, this.paint.height); }
 
-  setColor(c) { this.brush.color = c; console.log('[PaintEngine] setColor:', c); document.getElementById('brushDot').style.background = c; }
+  setColor(c) { this.brush.color = c; document.getElementById('brushDot').style.background = c; }
   setSize(s) { this.brush.size = Math.max(2, Math.min(60, s)); document.getElementById('brushSize').textContent = Math.round(s) + 'px'; }
 
   frame() {
@@ -71,7 +71,13 @@ export class PaintEngine {
   _dot(p) {
     const ctx = this.pctx, r = this.brush.size / 2;
     const g = ctx.createRadialGradient(p.x, p.y, r * 0.2, p.x, p.y, r);
-    g.addColorStop(0, this.brush.color); g.addColorStop(1, this.brush.color + '00');
+    // Parse hex to RGB for reliable rgba() — avoids #fff00 invalid color bug
+    const hex = this.brush.color.replace('#', '');
+    const rgb = hex.length === 3
+      ? [parseInt(hex[0]+hex[0], 16), parseInt(hex[1]+hex[1], 16), parseInt(hex[2]+hex[2], 16)]
+      : [parseInt(hex.substring(0,2), 16), parseInt(hex.substring(2,4), 16), parseInt(hex.substring(4,6), 16)];
+    g.addColorStop(0, `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`);
+    g.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
   }
 
