@@ -42,7 +42,7 @@ export class HandTracker {
     this.detectionTime = 0;
 
     // Landmark smoothing — EMA to reduce jitter
-    this._smoothFactor = 0.35; // lower = smoother (0=no movement, 1=raw)
+    this._smoothFactor = 0.25; // lower = smoother (0=no movement, 1=raw)
     this._smoothedLandmarks = null; // { left: [hands], right: [hands] }
 
     // Skeleton persistence — keep rendering last known skeleton briefly after loss
