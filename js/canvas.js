@@ -128,6 +128,10 @@ export class PaintEngine {
     // Clear main canvas
     ctx.clearRect(0, 0, w, h);
 
+    // DEBUG: solid dark background so we can see if compositeFrame runs
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, w, h);
+
     // Layer 1: Camera frame (adjustable opacity)
     ctx.save();
     ctx.globalAlpha = this.cameraOpacity;
@@ -141,9 +145,14 @@ export class PaintEngine {
       ctx.drawImage(this.paintLayer, 0, 0, w, h);
     }
 
-    // Layer 3: Hand skeleton overlay (always full opacity)
+    // DEBUG: giant magenta rectangle to prove skeletonRenderer is called
     if (this.skeletonRenderer) {
+      ctx.fillStyle = 'rgba(255,0,255,0.5)';
+      ctx.fillRect(w - 60, 10, 50, 50);
       this.skeletonRenderer(ctx, w, h);
+      // DEBUG: green rect after skeleton renderer returns
+      ctx.fillStyle = 'rgba(0,255,0,0.5)';
+      ctx.fillRect(w - 120, 10, 50, 50);
     }
   }
 

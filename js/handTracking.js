@@ -182,23 +182,26 @@ export class HandTracker {
   drawSkeleton(ctx, w, h) {
     const hands = this.getHands();
 
+    // DEBUG: bright yellow rect in top-left to prove drawSkeleton is called
+    ctx.fillStyle = 'rgba(255,255,0,0.7)';
+    ctx.fillRect(10, 10, 40, 40);
+
     // Persistence: keep rendering last known hands for a bit after loss
     if (hands.length > 0) {
       this._lastHands = hands;
       this._skeletonFramesLeft = this._SKELETON_PERSIST;
-      if (!this._didLogSkeleton) {
-        console.log('[HandTracker] Skeleton active —', hands.length, 'hand(s), persistence:', this._skeletonFramesLeft, 'frames');
-        this._didLogSkeleton = true;
-      }
     } else if (this._skeletonFramesLeft > 0) {
       this._skeletonFramesLeft--;
     } else {
-      if (this._didLogSkeleton) {
-        console.log('[HandTracker] Skeleton gone — no hands, persistence expired');
-        this._didLogSkeleton = false;
-      }
-      return; // Nothing to draw
+      // DEBUG: red rect = no hands, persistence expired
+      ctx.fillStyle = 'rgba(255,0,0,0.7)';
+      ctx.fillRect(10, 60, 40, 40);
+      return;
     }
+
+    // DEBUG: blue rect = hands exist, about to draw skeleton
+    ctx.fillStyle = 'rgba(0,100,255,0.7)';
+    ctx.fillRect(10, 110, 40, 40);
 
     for (const h of this._lastHands) {
       const lm = h.landmarks;
