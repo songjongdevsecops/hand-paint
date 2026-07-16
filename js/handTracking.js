@@ -19,8 +19,8 @@ const MODEL_OPTIONS = {
   runningMode: 'VIDEO',
   minFaceDetectionConfidence: 0.3,
   minFaceTrackingConfidence: 0.3,
-  minHandDetectionConfidence: 0.5,
-  minHandTrackingConfidence: 0.5,
+  minHandDetectionConfidence: 0.4,   // Lower = detects hands more easily
+  minHandTrackingConfidence: 0.3,    // Lower = keeps tracking longer
   minPoseDetectionConfidence: 0.3,
   minPoseTrackingConfidence: 0.3,
   minFacePresenceConfidence: 0.3,
@@ -174,36 +174,65 @@ export class HandTracker {
   }
 
   /**
-   * Draw the hand skeleton overlay on the given canvas context.
-   * Only renders the paint hand (single hand — avoids visual confusion).
-   * Persists the last known skeleton briefly after detection drops.
+   * Draw hand skeleton overlay for ALL detected hands.
+   * Intense, high-contrast rendering — always visible.
+   * Persists briefly after detection loss to prevent flicker.
    */
   drawSkeleton(ctx, w, h) {
-    const hand = this.getPaintHand();
+    const hands = this.getHands();
 
-    if (hand) {
-      this._lastHands = [hand];
+    // Persistence: keep rendering last known hands for a bit after loss
+    if (hands.length > 0) {
+      this._lastHands = hands;
       this._skeletonFramesLeft = this._SKELETON_PERSIST;
     } else if (this._skeletonFramesLeft > 0) {
       this._skeletonFramesLeft--;
     } else {
-      return;
+      return; // Nothing to draw
     }
 
     for (const h of this._lastHands) {
       const lm = h.landmarks;
       const isRight = h.handedness === 'right';
+
+      // Intense colors — right hand hot pink, left hand bright cyan
       const color = isRight ? '#ff1493' : '#00ffff';
 
-      this._drawConnections(ctx, lm, w, h, color + '44', isRight ? 8 : 6);
-      this._drawConnections(ctx, lm, w, h, color + 'cc', isRight ? 3 : 2);
+      // Thick glow layer
+      this._drawConnections(ctx, lm, w, h, isRight ? 'rgba(255,20,147,0.4)' : 'rgba(0,255,255,0.4)', 12);
+      // Medium solid layer
+      this._drawConnections(ctx, lm, w, h, isRight ? 'rgba(255,20,147,0.85)' : 'rgba(0,255,255,0.85)', 4);
+      // Thin bright core
+      this._drawConnections(ctx, lm, w, h, isRight ? '#ff69b4' : '#80ffff', 2);
 
+      // Draw joint dots — larger, with glow
       for (const p of lm) {
         const x = this._mirrorX(p.x, w);
         const y = p.y * h;
-        ctx.fillStyle = color;
+
+        // Glow
+        ctx.fillStyle = isRight ? 'rgba(255,20,147,0.5)' : 'rgba(0,255,255,0.5)';
         ctx.beginPath();
-        ctx.arc(x, y, isRight ? 5 : 4, 0, Math.PI * 2);
+        ctx.arc(x, y, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Core
+        ctx.fillStyle = isRight ? '#ff69b4' : '#ffffff';
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Bright fingertip dots (make fingertips extra visible)
+      const tips = [4, 8, 12, 16, 20]; // thumb, index, middle, ring, pinky
+      for (const tipIdx of tips) {
+        const t = lm[tipIdx];
+        if (!t) continue;
+        const tx = this._mirrorX(t.x, w);
+        const ty = t.y * h;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(tx, ty, 5, 0, Math.PI * 2);
         ctx.fill();
       }
     }
