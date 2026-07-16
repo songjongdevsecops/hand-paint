@@ -9,8 +9,8 @@
 </head>
 <body>
 
-  <!-- Hidden webcam video for MediaPipe processing -->
-  <video id="webcam" autoplay playsinline style="display:none;"></video>
+  <!-- Hidden webcam video for MediaPipe processing — must NOT be display:none or browser stops decoding frames -->
+  <video id="webcam" autoplay playsinline muted></video>
 
   <!-- Main painting canvas (full viewport) -->
   <canvas id="paintCanvas"></canvas>

@@ -62,24 +62,19 @@ export class HandTracker {
     report(20, 'Camera ready. Loading WASM modules...');
 
     // Step 2: Initialize MediaPipe FilesetResolver (loads WASM)
-    let fileset;
-    try {
-      fileset = await FilesetResolver.forVisionTasks(WASM_CDN);
-      report(50, 'WASM loaded. Creating Holistic Landmarker...');
-    } catch (err) {
-      console.warn('[HandTracker] GPU delegate failed, falling back to CPU', err);
-      // Fallback: try CPU delegate
-      MODEL_OPTIONS.baseOptions.delegate = 'CPU';
-      fileset = await FilesetResolver.forVisionTasks(WASM_CDN);
-      report(50, 'WASM loaded (CPU mode). Creating Holistic Landmarker...');
-    }
+    const fileset = await FilesetResolver.forVisionTasks(WASM_CDN);
+    report(50, 'WASM loaded. Creating Holistic Landmarker...');
 
-    // Step 3: Create HolisticLandmarker
-    this.holisticLandmarker = await HolisticLandmarker.createFromOptions(
-      fileset,
-      MODEL_OPTIONS
-    );
-    report(80, 'Holistic Landmarker ready. Starting detection...');
+    // Step 3: Create HolisticLandmarker — try GPU first, fall back to CPU
+    try {
+      this.holisticLandmarker = await HolisticLandmarker.createFromOptions(fileset, MODEL_OPTIONS);
+      report(80, 'Holistic Landmarker ready (GPU). Starting detection...');
+    } catch (err) {
+      console.warn('[HandTracker] GPU delegate failed, falling back to CPU:', err.message);
+      MODEL_OPTIONS.baseOptions.delegate = 'CPU';
+      this.holisticLandmarker = await HolisticLandmarker.createFromOptions(fileset, MODEL_OPTIONS);
+      report(80, 'Holistic Landmarker ready (CPU). Starting detection...');
+    }
 
     console.log('[HandTracker] Initialized — delegate:', MODEL_OPTIONS.baseOptions.delegate);
     this.isRunning = true;
@@ -106,14 +101,21 @@ export class HandTracker {
       });
 
       this.video.srcObject = this.stream;
-      this.video.play();
 
-      // Wait for video to be ready
-      await new Promise((resolve) => {
-        this.video.onloadedmetadata = () => {
-          this.video.play();
+      // Wait until the video is actually playing (not just metadata loaded)
+      await new Promise((resolve, reject) => {
+        const onPlaying = () => {
+          this.video.removeEventListener('playing', onPlaying);
           resolve();
         };
+        this.video.addEventListener('playing', onPlaying);
+        // Kick off playback
+        this.video.play().catch(reject);
+        // Safety: resolve after 8s even if 'playing' never fires
+        setTimeout(() => {
+          this.video.removeEventListener('playing', onPlaying);
+          resolve();
+        }, 8000);
       });
 
       console.log('[HandTracker] Camera started:', this.video.videoWidth, 'x', this.video.videoHeight);
@@ -127,18 +129,30 @@ export class HandTracker {
 
   /**
    * Main processing loop: detect landmarks on each frame
+   * Throttled to ~30 FPS to avoid overwhelming MediaPipe
    */
   _processLoop() {
     if (!this.isRunning || !this.holisticLandmarker) return;
 
-    const processFrame = () => {
+    const TARGET_FPS = 30;
+    const FRAME_INTERVAL = 1000 / TARGET_FPS;
+    let lastFrameTime = 0;
+
+    const processFrame = (timestamp) => {
       if (!this.isRunning) return;
+
+      // Throttle: only process at target FPS
+      if (timestamp - lastFrameTime < FRAME_INTERVAL) {
+        requestAnimationFrame(processFrame);
+        return;
+      }
+      lastFrameTime = timestamp;
 
       const startTime = performance.now();
 
       try {
-        // Check if video has dimensions
-        if (this.video.readyState >= 2 && this.video.videoWidth > 0) {
+        // Check if video is actually playing and has dimensions
+        if (this.video.readyState >= 2 && this.video.videoWidth > 0 && !this.video.paused) {
           // Run Holistic Landmarker detection
           const results = this.holisticLandmarker.detectForVideo(
             this.video,
@@ -175,24 +189,27 @@ export class HandTracker {
 
   /**
    * Get hand landmarks from the latest results.
-   * Returns array of hands, each with landmarks array.
+   * Returns array of hands, each with landmarks array (21 points).
    */
   getHands() {
     if (!this.lastResults) return [];
     const hands = [];
 
-    // MediaPipe Holistic returns leftHandLandmarks and rightHandLandmarks
+    // MediaPipe returns leftHandLandmarks and rightHandLandmarks as arrays of arrays:
+    // Each is NormalizedLandmark[][] — outer array = detected hands, inner = 21 landmarks
     if (this.lastResults.leftHandLandmarks && this.lastResults.leftHandLandmarks.length > 0) {
-      hands.push({
-        handedness: 'left',
-        landmarks: this.lastResults.leftHandLandmarks
-      });
+      for (const handLms of this.lastResults.leftHandLandmarks) {
+        if (handLms && handLms.length >= 21) {
+          hands.push({ handedness: 'left', landmarks: handLms });
+        }
+      }
     }
     if (this.lastResults.rightHandLandmarks && this.lastResults.rightHandLandmarks.length > 0) {
-      hands.push({
-        handedness: 'right',
-        landmarks: this.lastResults.rightHandLandmarks
-      });
+      for (const handLms of this.lastResults.rightHandLandmarks) {
+        if (handLms && handLms.length >= 21) {
+          hands.push({ handedness: 'right', landmarks: handLms });
+        }
+      }
     }
 
     return hands;
@@ -215,35 +232,32 @@ export class HandTracker {
 
   /**
    * Draw landmarks on a canvas (for PiP preview)
-   * @param {CanvasRenderingContext2D} ctx
-   * @param {number} canvasWidth
-   * @param {number} canvasHeight
    */
   drawPreview(ctx, canvasWidth, canvasHeight) {
-    if (!this.lastResults) return;
-
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-    // Draw video frame mirrored
+    // Always draw the video frame (mirrored)
     ctx.save();
     ctx.translate(canvasWidth, 0);
     ctx.scale(-1, 1);
-    ctx.drawImage(this.video, 0, 0, canvasWidth, canvasHeight);
+    if (this.video.readyState >= 2 && this.video.videoWidth > 0) {
+      ctx.drawImage(this.video, 0, 0, canvasWidth, canvasHeight);
+    }
     ctx.restore();
 
-    // Draw hand landmarks
+    // Draw hand landmarks overlay if we have results
+    if (!this.lastResults) return;
     const hands = this.getHands();
-    const scaleX = canvasWidth / this.video.videoWidth;
-    const scaleY = canvasHeight / this.video.videoHeight;
+    if (hands.length === 0) return;
 
     for (const hand of hands) {
       const landmarks = hand.landmarks;
       const color = hand.handedness === 'right' ? '#ff1493' : '#00ffff';
 
       // Draw connections
-      this._drawHandConnections(ctx, landmarks, scaleX, scaleY, canvasWidth, canvasHeight, color + '88');
+      this._drawHandConnections(ctx, landmarks, canvasWidth, canvasHeight, color + '88');
 
-      // Draw landmarks
+      // Draw landmark dots
       for (const lm of landmarks) {
         const x = canvasWidth - (lm.x * canvasWidth); // Mirror
         const y = lm.y * canvasHeight;
@@ -254,7 +268,7 @@ export class HandTracker {
       }
 
       // Highlight index fingertip (painting point)
-      const indexTip = landmarks[8]; // INDEX_TIP
+      const indexTip = landmarks[8];
       const tipX = canvasWidth - (indexTip.x * canvasWidth);
       const tipY = indexTip.y * canvasHeight;
       ctx.strokeStyle = '#fff';
@@ -268,7 +282,7 @@ export class HandTracker {
   /**
    * Draw connection lines between hand landmarks
    */
-  _drawHandConnections(ctx, landmarks, scaleX, scaleY, cw, ch, color) {
+  _drawHandConnections(ctx, landmarks, cw, ch, color) {
     // Connection list for hand skeleton (21 landmarks)
     const connections = [
       [0,1],[1,2],[2,3],[3,4],       // Thumb

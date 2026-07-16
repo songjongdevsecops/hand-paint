@@ -34,8 +34,21 @@ html, body {
 }
 
 /* ============================================================
-   Canvas — full viewport painting surface
+   Hidden webcam — must NOT use display:none
+   (browsers stop decoding frames on hidden elements)
+   Instead: render offscreen at tiny size
    ============================================================ */
+
+#webcam {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 2px;
+  opacity: 0.01;
+  pointer-events: none;
+  z-index: -1;
+}
 
 #paintCanvas {
   position: absolute;
