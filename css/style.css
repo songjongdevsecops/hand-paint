@@ -1,0 +1,437 @@
+/* ============================================================
+   Hand Paint — CSS
+   Dark theme, responsive, full-viewport canvas app
+   ============================================================ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #0d0d0d;
+  --surface: #1a1a2e;
+  --surface-light: #252540;
+  --accent: #ff1493;
+  --accent-dim: #ff149380;
+  --text: #e0e0e0;
+  --text-dim: #888;
+  --radius: 10px;
+  --transition: 0.2s ease;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+/* ============================================================
+   Canvas — full viewport painting surface
+   ============================================================ */
+
+#paintCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  cursor: none;
+}
+
+/* ============================================================
+   Webcam PiP — small preview of what the camera sees
+   ============================================================ */
+
+#pipContainer {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 2px solid var(--accent-dim);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+  transition: opacity var(--transition);
+  background: #000;
+}
+
+#pipCanvas {
+  display: block;
+  width: 200px;
+  height: 150px;
+  object-fit: cover;
+  transform: scaleX(-1); /* Mirror */
+}
+
+#pipStatus {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  font-size: 11px;
+  color: #0f0;
+  background: rgba(0,0,0,0.7);
+  padding: 2px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* ============================================================
+   Color Palette Panel
+   ============================================================ */
+
+#colorPalette {
+  position: fixed;
+  top: 50%;
+  left: 24px;
+  transform: translateY(-50%);
+  z-index: 10;
+  background: var(--surface);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  transition: opacity var(--transition), transform var(--transition);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+#colorPalette.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) translateX(-20px);
+}
+
+.panel-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 36px);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.color-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform var(--transition), border-color var(--transition);
+}
+
+.color-swatch:hover {
+  transform: scale(1.15);
+}
+
+.color-swatch.active {
+  border-color: #fff;
+  box-shadow: 0 0 12px currentColor;
+}
+
+.quick-colors {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.quick-color {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform var(--transition);
+}
+
+.quick-color:hover {
+  transform: scale(1.2);
+  border-color: #fff;
+}
+
+/* ============================================================
+   Actions Panel — bottom-right floating buttons
+   ============================================================ */
+
+#actionsPanel {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.action-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-dim);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 20px;
+  cursor: pointer;
+  transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+.action-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(255,20,147,0.4);
+}
+
+.action-btn:active {
+  transform: scale(0.95);
+}
+
+/* ============================================================
+   Brush HUD — top-left info
+   ============================================================ */
+
+#brushHud {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hud-item {
+  background: var(--surface);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  font-size: 14px;
+  backdrop-filter: blur(10px);
+}
+
+#brushDot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid rgba(255,255,255,0.3);
+  flex-shrink: 0;
+}
+
+#brushSize {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 40px;
+}
+
+#gestureLabel {
+  color: var(--accent);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+/* ============================================================
+   Loading & Error Overlays
+   ============================================================ */
+
+#loadingOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  transition: opacity 0.5s ease;
+}
+
+#loadingOverlay.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.spinner {
+  width: 56px;
+  height: 56px;
+  border: 4px solid var(--surface-light);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+#loadingText {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.loading-sub {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+#loadingBar {
+  width: 280px;
+  height: 4px;
+  background: var(--surface-light);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#loadingProgress {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+#errorOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0,0,0,0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#errorOverlay.hidden {
+  display: none;
+}
+
+.error-box {
+  background: var(--surface);
+  border: 1px solid #ff4444;
+  border-radius: var(--radius);
+  padding: 32px 40px;
+  text-align: center;
+  max-width: 400px;
+}
+
+.error-box h2 {
+  color: #ff4444;
+  margin-bottom: 12px;
+}
+
+.error-box p {
+  color: var(--text-dim);
+  margin-bottom: 20px;
+}
+
+#retryBtn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 10px 28px;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+#retryBtn:hover {
+  background: #ff44a3;
+}
+
+/* ============================================================
+   Hidden utility
+   ============================================================ */
+
+.hidden {
+  display: none !important;
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+
+@media (max-width: 768px) {
+  #pipCanvas {
+    width: 140px;
+    height: 105px;
+  }
+
+  #colorPalette {
+    left: 8px;
+    padding: 10px;
+  }
+
+  .color-grid {
+    grid-template-columns: repeat(4, 32px);
+    gap: 4px;
+  }
+
+  .color-swatch {
+    width: 32px;
+    height: 32px;
+  }
+
+  #actionsPanel {
+    bottom: 16px;
+    right: 8px;
+    gap: 8px;
+  }
+
+  .action-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  #pipContainer {
+    top: 8px;
+    right: 8px;
+  }
+
+  #pipCanvas {
+    width: 100px;
+    height: 75px;
+  }
+
+  #brushHud {
+    top: 8px;
+    left: 8px;
+  }
+
+  .hud-item {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  #colorPalette {
+    left: 4px;
+    padding: 8px;
+  }
+}

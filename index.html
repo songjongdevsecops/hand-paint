@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hand Paint — MediaPipe Holistic + WASM</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✋</text></svg>">
+</head>
+<body>
+
+  <!-- Hidden webcam video for MediaPipe processing -->
+  <video id="webcam" autoplay playsinline style="display:none;"></video>
+
+  <!-- Main painting canvas (full viewport) -->
+  <canvas id="paintCanvas"></canvas>
+
+  <!-- Webcam PiP preview -->
+  <div id="pipContainer">
+    <canvas id="pipCanvas" width="240" height="180"></canvas>
+    <div id="pipStatus"></div>
+  </div>
+
+  <!-- Color palette panel (hidden by default) -->
+  <div id="colorPalette" class="panel hidden">
+    <div class="panel-title">Colors</div>
+    <div class="color-grid" id="colorGrid">
+      <!-- Populated by JS -->
+    </div>
+    <div class="quick-colors" id="quickColors">
+      <!-- Quick color shortcuts -->
+    </div>
+  </div>
+
+  <!-- Actions panel -->
+  <div id="actionsPanel" class="panel">
+    <button class="action-btn" id="btnUndo" title="Undo (pinky up)">↩</button>
+    <button class="action-btn" id="btnRedo" title="Redo">↪</button>
+    <button class="action-btn" id="btnClear" title="Clear canvas (fist 2s)">🗑</button>
+    <button class="action-btn" id="btnSave" title="Save (thumb up)">💾</button>
+    <button class="action-btn" id="btnPalette" title="Color palette (open palm)">🎨</button>
+  </div>
+
+  <!-- Brush info HUD -->
+  <div id="brushHud">
+    <div id="brushPreview" class="hud-item">
+      <div id="brushDot"></div>
+      <span id="brushSize">5px</span>
+    </div>
+    <div id="gestureIndicator" class="hud-item">
+      <span id="gestureLabel">Initializing...</span>
+    </div>
+  </div>
+
+  <!-- Loading overlay -->
+  <div id="loadingOverlay">
+    <div class="spinner"></div>
+    <p id="loadingText">Loading MediaPipe Holistic...</p>
+    <p class="loading-sub">WASM + GPU acceleration</p>
+    <div id="loadingBar">
+      <div id="loadingProgress"></div>
+    </div>
+  </div>
+
+  <!-- Error overlay -->
+  <div id="errorOverlay" class="hidden">
+    <div class="error-box">
+      <h2>⚠️ Camera Required</h2>
+      <p id="errorMessage">Please allow camera access to use this app.</p>
+      <button id="retryBtn">Retry</button>
+    </div>
+  </div>
+
+  <!-- Import maps for MediaPipe CDN -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/holistic_bundle.mjs"
+    }
+  }
+  </script>
+
+  <!-- Application scripts (ES modules) -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
