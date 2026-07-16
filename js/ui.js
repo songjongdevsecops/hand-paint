@@ -1,17 +1,15 @@
 /* ============================================================
-   ui.js — UI controls and overlays
+   ui.js — UI controls v2
    
-   Manages:
    - Loading/error overlays
-   - Color palette panel
+   - Color palette
    - Action buttons
    - Brush HUD
-   - PiP preview
+   - Opacity sliders (camera & skeleton)
    ============================================================ */
 
 export class UI {
   constructor() {
-    // Cache DOM refs
     this.el = {
       loading: document.getElementById('loadingOverlay'),
       loadingText: document.getElementById('loadingText'),
@@ -24,37 +22,37 @@ export class UI {
       quickColors: document.getElementById('quickColors'),
       brushDot: document.getElementById('brushDot'),
       brushSize: document.getElementById('brushSize'),
-      gestureLabel: document.getElementById('gestureIndicator'),
-      pipCanvas: document.getElementById('pipCanvas'),
+      gestureLabel: document.getElementById('gestureLabel'),
       pipStatus: document.getElementById('pipStatus'),
       btnUndo: document.getElementById('btnUndo'),
       btnRedo: document.getElementById('btnRedo'),
       btnClear: document.getElementById('btnClear'),
       btnSave: document.getElementById('btnSave'),
       btnPalette: document.getElementById('btnPalette'),
+      cameraOpacitySlider: document.getElementById('cameraOpacitySlider'),
+      cameraOpacityVal: document.getElementById('cameraOpacityVal'),
+      skeletonOpacitySlider: document.getElementById('skeletonOpacitySlider'),
+      skeletonOpacityVal: document.getElementById('skeletonOpacityVal'),
     };
 
-    // Color palette state
     this.isPaletteOpen = false;
     this._buildColorPalette();
   }
 
   /* ---- Loading & Error ---- */
 
-  setLoadingProgress(percent, text) {
-    this.el.loadingProgress.style.width = percent + '%';
+  setLoadingProgress(pct, text) {
+    this.el.loadingProgress.style.width = pct + '%';
     this.el.loadingText.textContent = text;
   }
 
   hideLoading() {
     this.el.loading.classList.add('fade-out');
-    setTimeout(() => {
-      this.el.loading.classList.add('hidden');
-    }, 500);
+    setTimeout(() => this.el.loading.classList.add('hidden'), 500);
   }
 
-  showError(message) {
-    this.el.errorMessage.textContent = message;
+  showError(msg) {
+    this.el.errorMessage.textContent = msg;
     this.el.error.classList.remove('hidden');
   }
 
@@ -62,19 +60,18 @@ export class UI {
     this.el.error.classList.add('hidden');
   }
 
-  onRetry(callback) {
-    this.el.retryBtn.addEventListener('click', callback);
+  onRetry(cb) {
+    this.el.retryBtn.addEventListener('click', cb);
   }
 
   /* ---- Color Palette ---- */
 
   _buildColorPalette() {
-    // Main color grid: 20 common colors
     const colors = [
-      '#FFFFFF', '#FF0000', '#FF4500', '#FF8C00', '#FFD700',
-      '#00FF00', '#00FF7F', '#00CED1', '#1E90FF', '#0000FF',
-      '#8A2BE2', '#9400D3', '#FF1493', '#FF69B4', '#DC143C',
-      '#FF6347', '#FFA500', '#32CD32', '#00BFFF', '#808080',
+      '#FF1493','#FFFFFF','#FF0000','#FF4500','#FF8C00','#FFD700',
+      '#00FF00','#00FF7F','#00CED1','#1E90FF','#0000FF',
+      '#8A2BE2','#9400D3','#FF69B4','#DC143C',
+      '#FF6347','#FFA500','#32CD32','#00BFFF','#808080',
     ];
 
     this.el.colorGrid.innerHTML = '';
@@ -83,14 +80,13 @@ export class UI {
       swatch.className = 'color-swatch';
       swatch.style.background = color;
       swatch.dataset.color = color;
-      if (color === '#FFFFFF') swatch.classList.add('active');
+      if (color === '#FF1493') swatch.classList.add('active');
       this.el.colorGrid.appendChild(swatch);
     });
 
-    // Quick colors row
     const quickColors = [
-      '#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF',
-      '#FFFF00', '#FF1493', '#00FFFF', '#FF8C00', '#808080'
+      '#000000','#FFFFFF','#FF1493','#FF0000','#00FF00','#0000FF',
+      '#FFFF00','#00FFFF','#FF8C00','#808080'
     ];
 
     this.el.quickColors.innerHTML = '';
@@ -103,48 +99,22 @@ export class UI {
     });
   }
 
-  /**
-   * Bind color selection events.
-   * @param {function} onColorSelect - callback(color: string)
-   */
-  onColorSelect(callback) {
-    const handleClick = (e) => {
+  onColorSelect(cb) {
+    const handler = (e) => {
       const target = e.target.closest('[data-color]');
       if (!target) return;
-
       const color = target.dataset.color;
-      callback(color);
-
-      // Update active state
+      cb(color);
       document.querySelectorAll('.color-swatch.active').forEach(el => el.classList.remove('active'));
       target.classList.add('active');
     };
-
-    this.el.colorGrid.addEventListener('click', handleClick);
-    this.el.quickColors.addEventListener('click', handleClick);
+    this.el.colorGrid.addEventListener('click', handler);
+    this.el.quickColors.addEventListener('click', handler);
   }
 
   togglePalette() {
     this.isPaletteOpen = !this.isPaletteOpen;
-    if (this.isPaletteOpen) {
-      this.el.colorPalette.classList.remove('hidden');
-    } else {
-      this.el.colorPalette.classList.add('hidden');
-    }
-  }
-
-  showPalette() {
-    if (!this.isPaletteOpen) {
-      this.isPaletteOpen = true;
-      this.el.colorPalette.classList.remove('hidden');
-    }
-  }
-
-  hidePalette() {
-    if (this.isPaletteOpen) {
-      this.isPaletteOpen = false;
-      this.el.colorPalette.classList.add('hidden');
-    }
+    this.el.colorPalette.classList.toggle('hidden', !this.isPaletteOpen);
   }
 
   /* ---- Brush HUD ---- */
@@ -155,23 +125,43 @@ export class UI {
 
   setBrushSize(size) {
     this.el.brushSize.textContent = Math.round(size) + 'px';
-    this.el.brushDot.style.width = Math.min(size * 2, 40) + 'px';
-    this.el.brushDot.style.height = Math.min(size * 2, 40) + 'px';
+    this.el.brushDot.style.width = Math.min(size * 2, 36) + 'px';
+    this.el.brushDot.style.height = Math.min(size * 2, 36) + 'px';
   }
 
-  setGestureLabel(text) {
+  setGesture(text, color) {
     this.el.gestureLabel.textContent = text;
+    if (color) this.el.gestureLabel.style.color = color;
   }
-
-  /* ---- PiP Status ---- */
 
   setPipStatus(text) {
     this.el.pipStatus.textContent = text;
   }
 
+  /* ---- Opacity sliders ---- */
+
+  onCameraOpacity(cb) {
+    this.el.cameraOpacitySlider.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      this.el.cameraOpacityVal.textContent = Math.round(val * 100) + '%';
+      cb(val);
+    });
+    // Initial value
+    this.el.cameraOpacityVal.textContent = '30%';
+  }
+
+  onSkeletonOpacity(cb) {
+    this.el.skeletonOpacitySlider.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      this.el.skeletonOpacityVal.textContent = Math.round(val * 100) + '%';
+      cb(val);
+    });
+    this.el.skeletonOpacityVal.textContent = '80%';
+  }
+
   /* ---- Action buttons ---- */
 
-  onAction(event, callback) {
+  onAction(event, cb) {
     const map = {
       undo: this.el.btnUndo,
       redo: this.el.btnRedo,
@@ -180,17 +170,6 @@ export class UI {
       palette: this.el.btnPalette,
     };
     const btn = map[event];
-    if (btn) {
-      btn.addEventListener('click', callback);
-    }
-  }
-
-  /* ---- Gesture label ---- */
-
-  setGesture(text, color = null) {
-    this.el.gestureLabel.textContent = text;
-    if (color) {
-      this.el.gestureLabel.style.color = color;
-    }
+    if (btn) btn.addEventListener('click', cb);
   }
 }

@@ -1,13 +1,9 @@
 /* ============================================================
-   Hand Paint — CSS
-   Dark theme, responsive, full-viewport canvas app
+   Hand Paint — CSS v2
+   Dark theme, full-viewport, opacity controls
    ============================================================ */
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
   --bg: #0d0d0d;
@@ -33,78 +29,104 @@ html, body {
   touch-action: none;
 }
 
-/* ============================================================
-   Hidden webcam — must NOT use display:none
-   (browsers stop decoding frames on hidden elements)
-   Instead: render offscreen at tiny size
-   ============================================================ */
+/* ---- Hidden webcam (offscreen but rendered) ---- */
 
 #webcam {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 2px;
-  height: 2px;
+  top: 0; left: 0;
+  width: 2px; height: 2px;
   opacity: 0.01;
   pointer-events: none;
   z-index: -1;
 }
 
+/* ---- Main Canvas ---- */
+
 #paintCanvas {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
   z-index: 1;
   cursor: none;
 }
 
-/* ============================================================
-   Webcam PiP — small preview of what the camera sees
-   ============================================================ */
+/* ---- Status Bar (top-right) ---- */
 
-#pipContainer {
+#statusBar {
   position: fixed;
-  top: 16px;
-  right: 16px;
+  top: 16px; right: 16px;
   z-index: 10;
+  background: var(--surface);
+  border: 1px solid var(--accent-dim);
   border-radius: var(--radius);
-  overflow: hidden;
-  border: 2px solid var(--accent-dim);
-  box-shadow: 0 4px 24px rgba(0,0,0,0.6);
-  transition: opacity var(--transition);
-  background: #000;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
 }
 
-#pipCanvas {
-  display: block;
-  width: 200px;
-  height: 150px;
-  object-fit: cover;
-  transform: scaleX(-1); /* Mirror */
+/* ---- Opacity Controls (top-left, under HUD) ---- */
+
+#opacityControls {
+  position: fixed;
+  top: 110px; left: 16px;
+  z-index: 10;
+  background: var(--surface);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 200px;
 }
 
-#pipStatus {
-  position: absolute;
-  bottom: 4px;
-  left: 4px;
+.opacity-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.opacity-row label {
+  width: 65px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.opacity-row input[type="range"] {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--surface-light);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.opacity-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.opacity-row span {
+  width: 36px;
+  text-align: right;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
-  color: #0f0;
-  background: rgba(0,0,0,0.7);
-  padding: 2px 6px;
-  border-radius: 4px;
-  pointer-events: none;
 }
 
-/* ============================================================
-   Color Palette Panel
-   ============================================================ */
+/* ---- Color Palette ---- */
 
 #colorPalette {
   position: fixed;
-  top: 50%;
-  left: 24px;
+  top: 50%; left: 24px;
   transform: translateY(-50%);
   z-index: 10;
   background: var(--surface);
@@ -140,51 +162,33 @@ html, body {
 }
 
 .color-swatch {
-  width: 36px;
-  height: 36px;
+  width: 36px; height: 36px;
   border-radius: 50%;
   border: 2px solid transparent;
   cursor: pointer;
   transition: transform var(--transition), border-color var(--transition);
 }
 
-.color-swatch:hover {
-  transform: scale(1.15);
-}
+.color-swatch:hover { transform: scale(1.15); }
+.color-swatch.active { border-color: #fff; box-shadow: 0 0 12px currentColor; }
 
-.color-swatch.active {
-  border-color: #fff;
-  box-shadow: 0 0 12px currentColor;
-}
-
-.quick-colors {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
+.quick-colors { display: flex; gap: 6px; flex-wrap: wrap; }
 
 .quick-color {
-  width: 28px;
-  height: 28px;
+  width: 28px; height: 28px;
   border-radius: 6px;
   border: 2px solid transparent;
   cursor: pointer;
   transition: transform var(--transition);
 }
 
-.quick-color:hover {
-  transform: scale(1.2);
-  border-color: #fff;
-}
+.quick-color:hover { transform: scale(1.2); border-color: #fff; }
 
-/* ============================================================
-   Actions Panel — bottom-right floating buttons
-   ============================================================ */
+/* ---- Action Buttons ---- */
 
 #actionsPanel {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: 24px; right: 24px;
   z-index: 10;
   display: flex;
   flex-direction: column;
@@ -192,8 +196,7 @@ html, body {
 }
 
 .action-btn {
-  width: 48px;
-  height: 48px;
+  width: 48px; height: 48px;
   border-radius: 50%;
   border: 2px solid var(--accent-dim);
   background: var(--surface);
@@ -214,18 +217,13 @@ html, body {
   box-shadow: 0 6px 20px rgba(255,20,147,0.4);
 }
 
-.action-btn:active {
-  transform: scale(0.95);
-}
+.action-btn:active { transform: scale(0.95); }
 
-/* ============================================================
-   Brush HUD — top-left info
-   ============================================================ */
+/* ---- Brush HUD ---- */
 
 #brushHud {
   position: fixed;
-  top: 16px;
-  left: 16px;
+  top: 16px; left: 16px;
   z-index: 10;
   display: flex;
   flex-direction: column;
@@ -242,14 +240,12 @@ html, body {
   gap: 10px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   font-size: 14px;
-  backdrop-filter: blur(10px);
 }
 
 #brushDot {
-  width: 28px;
-  height: 28px;
+  width: 28px; height: 28px;
   border-radius: 50%;
-  background: #fff;
+  background: #ff1493;
   border: 2px solid rgba(255,255,255,0.3);
   flex-shrink: 0;
 }
@@ -266,13 +262,10 @@ html, body {
   font-size: 13px;
 }
 
-/* ============================================================
-   Loading & Error Overlays
-   ============================================================ */
+/* ---- Loading & Error ---- */
 
 #loadingOverlay {
-  position: fixed;
-  inset: 0;
+  position: fixed; inset: 0;
   z-index: 100;
   background: var(--bg);
   display: flex;
@@ -283,38 +276,24 @@ html, body {
   transition: opacity 0.5s ease;
 }
 
-#loadingOverlay.fade-out {
-  opacity: 0;
-  pointer-events: none;
-}
+#loadingOverlay.fade-out { opacity: 0; pointer-events: none; }
+#loadingOverlay.hidden { display: none; }
 
 .spinner {
-  width: 56px;
-  height: 56px;
+  width: 56px; height: 56px;
   border: 4px solid var(--surface-light);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-#loadingText {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.loading-sub {
-  font-size: 14px;
-  color: var(--text-dim);
-}
+#loadingText { font-size: 20px; font-weight: 600; color: var(--text); }
+.loading-sub { font-size: 14px; color: var(--text-dim); }
 
 #loadingBar {
-  width: 280px;
-  height: 4px;
+  width: 280px; height: 4px;
   background: var(--surface-light);
   border-radius: 2px;
   overflow: hidden;
@@ -329,8 +308,7 @@ html, body {
 }
 
 #errorOverlay {
-  position: fixed;
-  inset: 0;
+  position: fixed; inset: 0;
   z-index: 200;
   background: rgba(0,0,0,0.9);
   display: flex;
@@ -338,9 +316,7 @@ html, body {
   justify-content: center;
 }
 
-#errorOverlay.hidden {
-  display: none;
-}
+#errorOverlay.hidden { display: none; }
 
 .error-box {
   background: var(--surface);
@@ -351,15 +327,8 @@ html, body {
   max-width: 400px;
 }
 
-.error-box h2 {
-  color: #ff4444;
-  margin-bottom: 12px;
-}
-
-.error-box p {
-  color: var(--text-dim);
-  margin-bottom: 20px;
-}
+.error-box h2 { color: #ff4444; margin-bottom: 12px; }
+.error-box p { color: var(--text-dim); margin-bottom: 20px; }
 
 #retryBtn {
   background: var(--accent);
@@ -369,82 +338,27 @@ html, body {
   border-radius: 6px;
   font-size: 16px;
   cursor: pointer;
-  transition: background var(--transition);
 }
 
-#retryBtn:hover {
-  background: #ff44a3;
-}
+#retryBtn:hover { background: #ff44a3; }
 
-/* ============================================================
-   Hidden utility
-   ============================================================ */
-
-.hidden {
-  display: none !important;
-}
-
-/* ============================================================
-   Responsive
-   ============================================================ */
+/* ---- Responsive ---- */
 
 @media (max-width: 768px) {
-  #pipCanvas {
-    width: 140px;
-    height: 105px;
-  }
-
-  #colorPalette {
-    left: 8px;
-    padding: 10px;
-  }
-
-  .color-grid {
-    grid-template-columns: repeat(4, 32px);
-    gap: 4px;
-  }
-
-  .color-swatch {
-    width: 32px;
-    height: 32px;
-  }
-
-  #actionsPanel {
-    bottom: 16px;
-    right: 8px;
-    gap: 8px;
-  }
-
-  .action-btn {
-    width: 40px;
-    height: 40px;
-    font-size: 18px;
-  }
+  #opacityControls { left: 8px; top: 100px; min-width: 170px; padding: 8px 10px; }
+  .opacity-row { font-size: 11px; }
+  .opacity-row label { width: 55px; }
+  #colorPalette { left: 8px; padding: 10px; }
+  .color-grid { grid-template-columns: repeat(4, 32px); gap: 4px; }
+  .color-swatch { width: 32px; height: 32px; }
+  #actionsPanel { bottom: 16px; right: 8px; gap: 8px; }
+  .action-btn { width: 40px; height: 40px; font-size: 18px; }
 }
 
 @media (max-width: 480px) {
-  #pipContainer {
-    top: 8px;
-    right: 8px;
-  }
-
-  #pipCanvas {
-    width: 100px;
-    height: 75px;
-  }
-
-  #brushHud {
-    top: 8px;
-    left: 8px;
-  }
-
-  .hud-item {
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-
-  #colorPalette {
-    left: 4px;
-    padding: 8px;
-  }
+  #opacityControls { top: 90px; min-width: 150px; }
+  #brushHud { top: 8px; left: 8px; }
+  .hud-item { padding: 6px 10px; font-size: 12px; }
+  #colorPalette { left: 4px; padding: 8px; }
+  #statusBar { top: 8px; right: 8px; font-size: 10px; padding: 4px 8px; }
 }

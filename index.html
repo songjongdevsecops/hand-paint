@@ -9,43 +9,52 @@
 </head>
 <body>
 
-  <!-- Hidden webcam video for MediaPipe processing — must NOT be display:none or browser stops decoding frames -->
+  <!-- Hidden webcam — must be rendered (not display:none) for frame decoding -->
   <video id="webcam" autoplay playsinline muted></video>
 
-  <!-- Main painting canvas (full viewport) -->
+  <!-- Main canvas (full viewport) — composites camera → paint → skeleton -->
   <canvas id="paintCanvas"></canvas>
 
-  <!-- Webcam PiP preview -->
-  <div id="pipContainer">
-    <canvas id="pipCanvas" width="240" height="180"></canvas>
-    <div id="pipStatus"></div>
+  <!-- Status bar (top-right) -->
+  <div id="statusBar">
+    <span id="pipStatus">Starting...</span>
+  </div>
+
+  <!-- Opacity controls (top-left, below HUD) -->
+  <div id="opacityControls" class="panel">
+    <div class="opacity-row">
+      <label>📷 Camera</label>
+      <input type="range" id="cameraOpacitySlider" min="0" max="1" step="0.05" value="0.3">
+      <span id="cameraOpacityVal">30%</span>
+    </div>
+    <div class="opacity-row">
+      <label>🦴 Skeleton</label>
+      <input type="range" id="skeletonOpacitySlider" min="0" max="1" step="0.05" value="0.8">
+      <span id="skeletonOpacityVal">80%</span>
+    </div>
   </div>
 
   <!-- Color palette panel (hidden by default) -->
   <div id="colorPalette" class="panel hidden">
     <div class="panel-title">Colors</div>
-    <div class="color-grid" id="colorGrid">
-      <!-- Populated by JS -->
-    </div>
-    <div class="quick-colors" id="quickColors">
-      <!-- Quick color shortcuts -->
-    </div>
+    <div class="color-grid" id="colorGrid"></div>
+    <div class="quick-colors" id="quickColors"></div>
   </div>
 
-  <!-- Actions panel -->
-  <div id="actionsPanel" class="panel">
+  <!-- Actions panel (bottom-right) -->
+  <div id="actionsPanel">
     <button class="action-btn" id="btnUndo" title="Undo (pinky up)">↩</button>
     <button class="action-btn" id="btnRedo" title="Redo">↪</button>
     <button class="action-btn" id="btnClear" title="Clear canvas (fist 2s)">🗑</button>
-    <button class="action-btn" id="btnSave" title="Save (thumb up)">💾</button>
-    <button class="action-btn" id="btnPalette" title="Color palette (open palm)">🎨</button>
+    <button class="action-btn" id="btnSave" title="Save as PNG">💾</button>
+    <button class="action-btn" id="btnPalette" title="Colors (open palm)">🎨</button>
   </div>
 
-  <!-- Brush info HUD -->
+  <!-- Brush HUD (top-left) -->
   <div id="brushHud">
     <div id="brushPreview" class="hud-item">
       <div id="brushDot"></div>
-      <span id="brushSize">5px</span>
+      <span id="brushSize">8px</span>
     </div>
     <div id="gestureIndicator" class="hud-item">
       <span id="gestureLabel">Initializing...</span>
@@ -57,21 +66,18 @@
     <div class="spinner"></div>
     <p id="loadingText">Loading MediaPipe Holistic...</p>
     <p class="loading-sub">WASM + GPU acceleration</p>
-    <div id="loadingBar">
-      <div id="loadingProgress"></div>
-    </div>
+    <div id="loadingBar"><div id="loadingProgress"></div></div>
   </div>
 
   <!-- Error overlay -->
   <div id="errorOverlay" class="hidden">
     <div class="error-box">
       <h2>⚠️ Camera Required</h2>
-      <p id="errorMessage">Please allow camera access to use this app.</p>
+      <p id="errorMessage">Please allow camera access.</p>
       <button id="retryBtn">Retry</button>
     </div>
   </div>
 
-  <!-- Import maps for MediaPipe CDN -->
   <script type="importmap">
   {
     "imports": {
@@ -80,7 +86,6 @@
   }
   </script>
 
-  <!-- Application scripts (ES modules) -->
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

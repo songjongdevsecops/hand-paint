@@ -1,63 +1,57 @@
 /* ============================================================
-   main.js — Application orchestrator
+   main.js — Application orchestrator v2
    
-   Ties together:
-   - HandTracker (MediaPipe Holistic)
-   - PaintCanvas (drawing engine)
-   - Gesture recognition
-   - UI management
+   - Render loop at 60fps compositing camera→paint→skeleton
+   - Gesture handling at 30fps from MediaPipe
+   - Opacity controls for camera background and skeleton overlay
    ============================================================ */
 
 import { HandTracker } from './handTracking.js';
-import { PaintCanvas } from './canvas.js';
-import { classifyGesture, mapToCanvas, LM } from './gestures.js';
+import { PaintEngine } from './canvas.js';
+import { classifyGesture, mapToCanvas } from './gestures.js';
 import { UI } from './ui.js';
 
 class HandPaintApp {
   constructor() {
     this.tracker = new HandTracker();
-    this.canvas = null;
+    this.engine = null;
     this.ui = new UI();
 
-    // State
-    this.currentGesture = null;
+    // Gesture state
+    this.currentGesture = 'unknown';
     this.previousGesture = null;
-    this.gestureHoldTime = 0;
-    this.gestureStartTime = 0;
+    this.isDrawing = false;
 
-    // Fist timer for clear canvas
+    // Action debounce timers
+    this.lastUndoTime = 0;
+    this.lastMenuToggle = 0;
+    this.undoDebounce = 1000;
+    this.menuDebounce = 800;
+
+    // Fist timer
     this.fistStartTime = 0;
-    this.fistHoldRequired = 1500; // 1.5 seconds
+    this.fistHoldRequired = 1500;
     this.fistCleared = false;
 
-    // Menu gesture debounce
-    this.lastMenuToggle = 0;
-    this.menuDebounceTime = 800;
-
-    // Undo gesture debounce
-    this.lastUndoTime = 0;
-    this.undoDebounceTime = 1000;
-
-    // Gesture stability: require N frames of same gesture before acting
-    this.gestureVotes = {};
-    this.gestureStabilityFrames = 3;
-
-    // Draw mode tracking
-    this.isDrawing = false;
-    this.hoverPosition = null;
+    // Render loop
+    this._rafId = null;
   }
 
-  /**
-   * Initialize and start the application
-   */
   async start() {
-    console.log('[HandPaint] Starting...');
+    console.log('[HandPaint] Starting v2...');
 
-    // Setup canvas
     const canvasEl = document.getElementById('paintCanvas');
-    this.canvas = new PaintCanvas(canvasEl);
+    this.engine = new PaintEngine(canvasEl);
 
-    // Setup UI event bindings
+    // Wire up renderers: camera frame and skeleton overlay
+    this.engine.cameraRenderer = (ctx, w, h) => {
+      this.tracker.drawCameraFrame(ctx, w, h);
+    };
+    this.engine.skeletonRenderer = (ctx, w, h) => {
+      this.tracker.drawSkeleton(ctx, w, h);
+    };
+
+    // Setup UI
     this._bindUI();
 
     // Initialize tracker
@@ -67,32 +61,24 @@ class HandPaintApp {
         this.ui.setLoadingProgress(pct, text);
       });
 
-      // Set results callback
-      this.tracker.onResults = (results, timestamp) => {
-        this._onFrame(results, timestamp);
-      };
+      this.tracker.onResults = (results, ts) => this._onFrame(results, ts);
 
-      // Hide loading, start PiP rendering
       this.ui.hideLoading();
-      this._startPiPRender();
+      this._startRenderLoop();
 
       console.log('[HandPaint] Ready!');
     } catch (err) {
-      console.error('[HandPaint] Initialization failed:', err);
+      console.error('[HandPaint] Init failed:', err);
       this.ui.showError(err.message);
-      this.ui.onRetry(() => {
-        this.ui.hideError();
-        this.start();
-      });
+      this.ui.onRetry(() => { this.ui.hideError(); this.start(); });
     }
   }
 
-  /**
-   * Bind UI button events
-   */
+  /* ---- UI bindings ---- */
+
   _bindUI() {
     this.ui.onColorSelect(color => {
-      this.canvas.setColor(color);
+      this.engine.setColor(color);
       this.ui.setBrushColor(color);
     });
 
@@ -101,177 +87,127 @@ class HandPaintApp {
     this.ui.onAction('clear', () => this._doClear());
     this.ui.onAction('save', () => this._doSave());
     this.ui.onAction('palette', () => this.ui.togglePalette());
+
+    // Opacity sliders
+    this.ui.onCameraOpacity(val => this.engine.setCameraOpacity(val));
+    this.ui.onSkeletonOpacity(val => this.engine.setSkeletonOpacity(val));
   }
 
-  /* ---- Frame Processing ---- */
+  /* ---- Render loop (60fps composite) ---- */
 
-  /**
-   * Called on every processed frame from MediaPipe
-   */
+  _startRenderLoop() {
+    const loop = () => {
+      this.engine.compositeFrame();
+
+      // Update FPS in HUD
+      this.ui.setPipStatus(`${this.tracker.fps} FPS · ${this.tracker.detectionTime.toFixed(0)}ms`);
+
+      this._rafId = requestAnimationFrame(loop);
+    };
+    this._rafId = requestAnimationFrame(loop);
+  }
+
+  /* ---- MediaPipe results callback (30fps) ---- */
+
   _onFrame(results, timestamp) {
-    // Get the preferred painting hand
     const paintHand = this.tracker.getPaintHand();
     if (!paintHand) {
-      this._setGestureState('searching', '#888');
-      // If we were drawing, stop
-      if (this.isDrawing) {
-        this.canvas.endStroke();
-        this.isDrawing = false;
-      }
+      this.ui.setGesture('Searching...', '#888');
+      if (this.isDrawing) { this.engine.endStroke(); this.isDrawing = false; }
       return;
     }
 
     const landmarks = paintHand.landmarks;
-
-    // Classify gesture
     const gesture = classifyGesture(landmarks);
-    const stableGesture = this._getStableGesture(gesture.type);
-
-    // Act on gesture
     this._handleGesture(gesture, landmarks, timestamp);
 
-    // Update gesture display
     this.previousGesture = this.currentGesture;
     this.currentGesture = gesture.type;
   }
 
-  /**
-   * Get a stable gesture by requiring N consecutive frames of the same type
-   */
-  _getStableGesture(type) {
-    // Reset votes on different gesture
-    if (this.previousGesture !== type) {
-      this.gestureVotes = {};
-      this.gestureHoldTime = 0;
-      this.gestureStartTime = performance.now();
-      return this.previousGesture; // Use previous until stable
-    }
-
-    // Increment vote
-    this.gestureVotes[type] = (this.gestureVotes[type] || 0) + 1;
-    this.gestureHoldTime = performance.now() - this.gestureStartTime;
-
-    if (this.gestureVotes[type] >= this.gestureStabilityFrames) {
-      return type; // Stable
-    }
-
-    return this.previousGesture || type;
-  }
-
-  /**
-   * Handle the classified gesture
-   */
   _handleGesture(gesture, landmarks, timestamp) {
-    const type = gesture.type;
-    const data = gesture.data;
+    const { type, data } = gesture;
 
     switch (type) {
       case 'paint':
-        this._handlePaint(data, landmarks);
-        this._setGestureState('🎨 Paint', '#ff1493');
+        this._handlePaint(data);
+        this.ui.setGesture('🎨 Paint', '#ff1493');
         break;
-
       case 'hover':
-        this._handleHover(data, landmarks);
-        this._setGestureState('👆 Hover', '#00bfff');
+        this._handleHover();
+        this.ui.setGesture('👆 Hover', '#00bfff');
         break;
-
       case 'fist':
         this._handleFist(timestamp);
-        this._setGestureState('✊ Fist', '#ff4444');
+        this.ui.setGesture('✊ Fist', '#ff4444');
         break;
-
       case 'undo':
         this._handleUndoGesture(timestamp);
-        this._setGestureState('↩ Undo', '#ffd700');
+        this.ui.setGesture('↩ Undo', '#ffd700');
         break;
-
       case 'menu':
         this._handleMenuGesture(timestamp);
-        this._setGestureState('🖐 Menu', '#ff8c00');
+        this.ui.setGesture('🖐 Menu', '#ff8c00');
         break;
-
       case 'pinch':
-        this._handlePinch(data, landmarks);
-        this._setGestureState('🤏 Brush', '#ff69b4');
+        this._handlePinch(data);
+        this.ui.setGesture('🤏 Brush', '#ff69b4');
         break;
-
       default:
-        // If we were drawing, stop
-        if (this.isDrawing) {
-          this.canvas.endStroke();
-          this.isDrawing = false;
-        }
-        this._setGestureState('...', '#888');
+        if (this.isDrawing) { this.engine.endStroke(); this.isDrawing = false; }
+        this.ui.setGesture('···', '#888');
         break;
     }
 
-    // Reset fist timer if gesture changed from fist
     if (type !== 'fist') {
       this.fistStartTime = 0;
       this.fistCleared = false;
     }
   }
 
-  /* ---- Gesture Handlers ---- */
+  /* ---- Gesture handlers ---- */
 
-  _handlePaint(data, landmarks) {
+  _handlePaint(data) {
     if (!data || !data.position) return;
 
-    const cw = this.canvas.canvas.clientWidth;
-    const ch = this.canvas.canvas.clientHeight;
-    if (cw <= 0 || ch <= 0) return; // Canvas not ready yet
+    const cw = this.engine.canvas.clientWidth;
+    const ch = this.engine.canvas.clientHeight;
+    if (cw <= 0 || ch <= 0) return;
 
     const pos = mapToCanvas(data.position, cw, ch);
 
-    // Update brush size from thumb-index distance
+    // Update brush size from gesture data
     if (data.brushSize) {
-      this.canvas.setSize(data.brushSize);
+      this.engine.setSize(data.brushSize);
       this.ui.setBrushSize(data.brushSize);
     }
 
     if (!this.isDrawing) {
-      this.canvas.startStroke(pos);
+      this.engine.startStroke(pos);
       this.isDrawing = true;
     } else {
-      this.canvas.continueStroke(pos);
+      this.engine.continueStroke(pos);
     }
-
-    this.hoverPosition = pos;
   }
 
-  _handleHover(data, landmarks) {
-    if (this.isDrawing) {
-      this.canvas.endStroke();
-      this.isDrawing = false;
-    }
-
-    if (data && data.position) {
-      this.hoverPosition = mapToCanvas(
-        data.position,
-        this.canvas.canvas.clientWidth,
-        this.canvas.canvas.clientHeight
-      );
-    }
+  _handleHover() {
+    if (this.isDrawing) { this.engine.endStroke(); this.isDrawing = false; }
   }
 
   _handleFist(timestamp) {
-    // Stop drawing if we were
-    if (this.isDrawing) {
-      this.canvas.endStroke();
-      this.isDrawing = false;
-    }
+    if (this.isDrawing) { this.engine.endStroke(); this.isDrawing = false; }
 
-    // Start tracking fist duration
     if (this.fistStartTime === 0) {
       this.fistStartTime = timestamp;
       this.fistCleared = false;
     }
 
     const elapsed = timestamp - this.fistStartTime;
-    this.ui.setGesture('✊ Hold to clear... ' + Math.max(0, Math.ceil((this.fistHoldRequired - elapsed) / 1000)) + 's', '#ff4444');
+    const remaining = Math.ceil((this.fistHoldRequired - elapsed) / 1000);
+    if (remaining > 0) {
+      this.ui.setGesture(`✊ Hold ${remaining}s to clear`, '#ff4444');
+    }
 
-    // Trigger clear after holding fist for required duration
     if (elapsed >= this.fistHoldRequired && !this.fistCleared) {
       this._doClear();
       this.fistCleared = true;
@@ -279,40 +215,25 @@ class HandPaintApp {
   }
 
   _handleUndoGesture(timestamp) {
-    if (this.isDrawing) {
-      this.canvas.endStroke();
-      this.isDrawing = false;
-    }
-
-    // Debounce undo
-    if (timestamp - this.lastUndoTime > this.undoDebounceTime) {
+    if (this.isDrawing) { this.engine.endStroke(); this.isDrawing = false; }
+    if (timestamp - this.lastUndoTime > this.undoDebounce) {
       this._doUndo();
       this.lastUndoTime = timestamp;
     }
   }
 
   _handleMenuGesture(timestamp) {
-    if (this.isDrawing) {
-      this.canvas.endStroke();
-      this.isDrawing = false;
-    }
-
-    // Debounce menu toggle
-    if (timestamp - this.lastMenuToggle > this.menuDebounceTime) {
+    if (this.isDrawing) { this.engine.endStroke(); this.isDrawing = false; }
+    if (timestamp - this.lastMenuToggle > this.menuDebounce) {
       this.ui.togglePalette();
       this.lastMenuToggle = timestamp;
     }
   }
 
-  _handlePinch(data, landmarks) {
-    if (this.isDrawing) {
-      this.canvas.endStroke();
-      this.isDrawing = false;
-    }
-
-    // Use pinch distance for brush size
+  _handlePinch(data) {
+    if (this.isDrawing) { this.engine.endStroke(); this.isDrawing = false; }
     if (data && data.brushSize) {
-      this.canvas.setSize(data.brushSize);
+      this.engine.setSize(data.brushSize);
       this.ui.setBrushSize(data.brushSize);
     }
   }
@@ -320,64 +241,32 @@ class HandPaintApp {
   /* ---- Actions ---- */
 
   _doUndo() {
-    if (this.canvas.undo()) {
+    if (this.engine.undo()) {
       this.ui.setGesture('↩ Undone!', '#ffd700');
       setTimeout(() => this.ui.setGesture(this.currentGesture || 'Ready', '#888'), 600);
     }
   }
 
   _doRedo() {
-    if (this.canvas.redo()) {
+    if (this.engine.redo()) {
       this.ui.setGesture('↪ Redone!', '#ffd700');
       setTimeout(() => this.ui.setGesture(this.currentGesture || 'Ready', '#888'), 600);
     }
   }
 
   _doClear() {
-    this.canvas.clear();
+    this.engine.clear();
     this.ui.setGesture('🗑 Cleared!', '#ff4444');
     setTimeout(() => this.ui.setGesture(this.currentGesture || 'Ready', '#888'), 800);
   }
 
   _doSave() {
-    this.canvas.download();
+    this.engine.download();
     this.ui.setGesture('💾 Saved!', '#00ff7f');
     setTimeout(() => this.ui.setGesture(this.currentGesture || 'Ready', '#888'), 800);
   }
-
-  /* ---- Helpers ---- */
-
-  _setGestureState(text, color) {
-    this.ui.setGesture(text, color);
-  }
-
-  /**
-   * Start the Picture-in-Picture preview render loop
-   */
-  _startPiPRender() {
-    const pipCanvas = this.ui.el.pipCanvas;
-    const pipCtx = pipCanvas.getContext('2d');
-    const pipW = pipCanvas.width;
-    const pipH = pipCanvas.height;
-
-    const renderPip = () => {
-      this.tracker.drawPreview(pipCtx, pipW, pipH);
-
-      // Update status with FPS and detection time
-      const fps = this.tracker.fps;
-      const dt = this.tracker.detectionTime.toFixed(1);
-      const delegate = 'GPU'; // We try GPU first
-      this.ui.setPipStatus(`${fps} FPS · ${dt}ms · ${delegate}`);
-
-      requestAnimationFrame(renderPip);
-    };
-
-    requestAnimationFrame(renderPip);
-  }
 }
 
-// Boot the app
+// Boot
 const app = new HandPaintApp();
-app.start().catch(err => {
-  console.error('[HandPaint] Fatal error:', err);
-});
+app.start().catch(err => console.error('[HandPaint] Fatal:', err));
