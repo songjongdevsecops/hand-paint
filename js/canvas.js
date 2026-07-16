@@ -45,6 +45,7 @@ export class PaintEngine {
   }
 
   undo() { if (this.hidx <= 0) return false; this.hidx--; const s = this.history[this.hidx]; this.pctx.putImageData(s.d, 0, 0); this.brush = { ...s.b }; return true; }
+  redo() { if (this.hidx >= this.history.length - 1) return false; this.hidx++; const s = this.history[this.hidx]; this.pctx.putImageData(s.d, 0, 0); this.brush = { ...s.b }; return true; }
 
   clear() { this._save(); this.pctx.clearRect(0, 0, this.paint.width, this.paint.height); }
 

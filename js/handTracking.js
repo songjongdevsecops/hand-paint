@@ -16,13 +16,13 @@ const OPTS = {
 
 // Pre-trained gesture → our internal type
 const GESTURE_MAP = {
-  'Closed_Fist': 'fist',
-  'Open_Palm': 'menu',
+  'Closed_Fist': 'none',
+  'Open_Palm': 'clear',
   'Pointing_Up': 'paint',
-  'Victory': 'hover',
-  'Thumb_Up': 'none',  // not used
-  'Thumb_Down': 'none',
-  'ILoveYou': 'none',
+  'Victory': 'nextColor',
+  'Thumb_Up': 'redo',
+  'Thumb_Down': 'undo',
+  'ILoveYou': 'prevColor',
   'None': 'none',
 };
 
