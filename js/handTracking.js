@@ -18,7 +18,7 @@ const MODEL_OPTIONS = {
   },
   runningMode: 'VIDEO',
   numHands: 1,                     // Native single-hand detection!
-  minHandDetectionConfidence: 0.4,
+  minHandDetectionConfidence: 0.3,  // Lower to catch hands at distance
   minHandTrackingConfidence: 0.2,  // Sticky tracking
   minHandPresenceConfidence: 0.3,
 };
@@ -172,10 +172,21 @@ export class HandTracker {
       if (!lm || lm.length < 21) continue;
       const color = hand.handedness === 'Right' ? '#ff1493' : '#00ffff';
 
+      // Scale bones proportionally to hand size on screen
+      const handSize = Math.hypot(
+        ((1 - lm[12].x) * w) - ((1 - lm[0].x) * w),
+        (lm[12].y * h) - (lm[0].y * h)
+      );
+      const s = Math.max(0.4, Math.min(2.0, handSize / 120));
+      const glow = Math.round(14 * s);
+      const solid = Math.round(6 * s);
+      const dotR = Math.round(8 * s);
+      const tipR = Math.round(9 * s);
+
       // Glow
-      this._drawConnections(ctx, lm, w, h, color + '55', 14);
+      this._drawConnections(ctx, lm, w, h, color + '55', glow);
       // Solid
-      this._drawConnections(ctx, lm, w, h, color + 'cc', 6);
+      this._drawConnections(ctx, lm, w, h, color + 'cc', solid);
 
       // Joints
       for (const p of lm) {
@@ -183,7 +194,7 @@ export class HandTracker {
         const y = p.y * h;
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.arc(x, y, 8, 0, Math.PI * 2);
+        ctx.arc(x, y, dotR, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -193,7 +204,7 @@ export class HandTracker {
         if (!t) continue;
         ctx.fillStyle = '#fff';
         ctx.beginPath();
-        ctx.arc(w - (t.x * w), t.y * h, 9, 0, Math.PI * 2);
+        ctx.arc(w - (t.x * w), t.y * h, tipR, 0, Math.PI * 2);
         ctx.fill();
       }
     }
