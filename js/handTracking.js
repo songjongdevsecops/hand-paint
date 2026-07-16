@@ -41,6 +41,10 @@ export class HandTracker {
     this._lastFpsUpdate = 0;
     this.detectionTime = 0;
 
+    // Landmark smoothing — EMA to reduce jitter
+    this._smoothFactor = 0.35; // lower = smoother (0=no movement, 1=raw)
+    this._smoothedLandmarks = null; // { left: [hands], right: [hands] }
+
     // Skeleton persistence — keep rendering last known skeleton briefly after loss
     this._lastHands = [];
     this._skeletonFramesLeft = 0;
@@ -143,6 +147,9 @@ export class HandTracker {
           this.lastResults = results;
           this.detectionTime = performance.now() - t0;
 
+          // Apply EMA smoothing to landmarks
+          this._smoothLandmarks(results);
+
           if (this.onResults) {
             this.onResults(results, performance.now());
           }
@@ -204,16 +211,29 @@ export class HandTracker {
       if (!landmarks || landmarks.length < 21) continue;
       const color = hand.handedness === 'right' ? '#ff1493' : '#00ffff';
 
-      // Draw connections — exact same code that worked in v1
-      this._drawConnections(ctx, landmarks, w, h, color + '88', 2);
+      // Thick glow
+      this._drawConnections(ctx, landmarks, w, h, color + '55', 8);
+      // Solid lines
+      this._drawConnections(ctx, landmarks, w, h, color + 'cc', 3);
 
-      // Draw landmarks
+      // Draw joint dots
       for (const lm of landmarks) {
         const x = w - (lm.x * w);
         const y = lm.y * h;
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Fingertip highlights
+      const tips = [4, 8, 12, 16, 20];
+      for (const idx of tips) {
+        const t = landmarks[idx];
+        if (!t) continue;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(w - (t.x * w), t.y * h, 6, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -246,21 +266,95 @@ export class HandTracker {
     return (1 - x) * w;
   }
 
+  /**
+   * Apply exponential moving average smoothing to all hand landmarks.
+   * Reduces jitter/tremor in detection.
+   */
+  _smoothLandmarks(results) {
+    const sf = this._smoothFactor; // How much raw input to blend (0-1)
+    
+    // Smooth left hand landmarks
+    if (results.leftHandLandmarks && results.leftHandLandmarks.length > 0) {
+      if (!this._smoothedLandmarks) {
+        // First detection — deep clone
+        this._smoothedLandmarks = {
+          left: results.leftHandLandmarks.map(hand => hand.map(lm => ({ x: lm.x, y: lm.y, z: lm.z }))),
+          right: []
+        };
+      } else {
+        // EMA: blend raw with previous smoothed
+        for (let h = 0; h < results.leftHandLandmarks.length; h++) {
+          if (!this._smoothedLandmarks.left[h]) {
+            this._smoothedLandmarks.left[h] = results.leftHandLandmarks[h].map(lm => ({ x: lm.x, y: lm.y, z: lm.z }));
+          } else {
+            const raw = results.leftHandLandmarks[h];
+            const smooth = this._smoothedLandmarks.left[h];
+            for (let i = 0; i < raw.length; i++) {
+              smooth[i].x += (raw[i].x - smooth[i].x) * sf;
+              smooth[i].y += (raw[i].y - smooth[i].y) * sf;
+              smooth[i].z += ((raw[i].z || 0) - smooth[i].z) * sf;
+            }
+          }
+        }
+        // Remove hands that disappeared
+        this._smoothedLandmarks.left.length = results.leftHandLandmarks.length;
+      }
+    } else {
+      // No left hand — clear smoothed
+      if (this._smoothedLandmarks) this._smoothedLandmarks.left = [];
+    }
+
+    // Smooth right hand landmarks
+    if (results.rightHandLandmarks && results.rightHandLandmarks.length > 0) {
+      if (!this._smoothedLandmarks) {
+        this._smoothedLandmarks = {
+          left: [],
+          right: results.rightHandLandmarks.map(hand => hand.map(lm => ({ x: lm.x, y: lm.y, z: lm.z })))
+        };
+      } else {
+        for (let h = 0; h < results.rightHandLandmarks.length; h++) {
+          if (!this._smoothedLandmarks.right[h]) {
+            this._smoothedLandmarks.right[h] = results.rightHandLandmarks[h].map(lm => ({ x: lm.x, y: lm.y, z: lm.z }));
+          } else {
+            const raw = results.rightHandLandmarks[h];
+            const smooth = this._smoothedLandmarks.right[h];
+            for (let i = 0; i < raw.length; i++) {
+              smooth[i].x += (raw[i].x - smooth[i].x) * sf;
+              smooth[i].y += (raw[i].y - smooth[i].y) * sf;
+              smooth[i].z += ((raw[i].z || 0) - smooth[i].z) * sf;
+            }
+          }
+        }
+        this._smoothedLandmarks.right.length = results.rightHandLandmarks.length;
+      }
+    } else {
+      if (this._smoothedLandmarks) this._smoothedLandmarks.right = [];
+    }
+  }
+
   /* ---- Landmark accessors ---- */
 
   getHands() {
-    if (!this.lastResults) return [];
+    // Use smoothed landmarks if available, otherwise raw
+    const src = (this._smoothedLandmarks && (this._smoothedLandmarks.left.length > 0 || this._smoothedLandmarks.right.length > 0))
+      ? this._smoothedLandmarks
+      : this.lastResults;
+
+    if (!src) return [];
     const hands = [];
 
-    if (this.lastResults.leftHandLandmarks) {
-      for (const handLms of this.lastResults.leftHandLandmarks) {
+    const leftLms = src.left || (this.lastResults?.leftHandLandmarks);
+    const rightLms = src.right || (this.lastResults?.rightHandLandmarks);
+
+    if (leftLms) {
+      for (const handLms of leftLms) {
         if (handLms && handLms.length >= 21) {
           hands.push({ handedness: 'left', landmarks: handLms });
         }
       }
     }
-    if (this.lastResults.rightHandLandmarks) {
-      for (const handLms of this.lastResults.rightHandLandmarks) {
+    if (rightLms) {
+      for (const handLms of rightLms) {
         if (handLms && handLms.length >= 21) {
           hands.push({ handedness: 'right', landmarks: handLms });
         }
