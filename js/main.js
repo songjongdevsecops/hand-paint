@@ -23,7 +23,7 @@ class Stabilizer {
     if (disc) {
       if (this.entry !== raw) { this.entry = raw; this.ec = 1; }
       else this.ec++;
-      if (this.ec < 5) return this.s;
+      if (this.ec < (raw === 'menu' ? 15 : 5)) return this.s;  // menu needs 15 frames hold
     }
     this.s = raw; this.exit = 0; this.entry = null; this.ec = 0;
     return this.s;
@@ -141,7 +141,7 @@ class App {
         break;
       case 'menu':
         if (this.drawing) { this.engine.end(); this.drawing = false; }
-        if (ts - this.menuLast > 1000) { $('palette').classList.toggle('hidden'); this.menuLast = ts; }
+        if (ts - this.menuLast > 2000) { $('palette').classList.toggle('hidden'); this.menuLast = ts; }
         $('gestureLabel').textContent = '🖐 Menu'; $('gestureLabel').style.color = '#f80';
         break;
       case 'fist':
@@ -189,8 +189,10 @@ class App {
       if (dir) prev = dir;
     }
     const amp = Math.max(...this.waveX) - Math.min(...this.waveX);
+    // Show wave progress
+    if (cross >= 1) $('gestureLabel').textContent = '👋 Wave ' + cross + '/' + 3; 
     const now = performance.now();
-    if (cross >= 4 && amp > 0.08 && now - this.waveLast > 2500) {
+    if (cross >= 3 && amp > 0.04 && now - this.waveLast > 2000) {
       this.waveLast = now; this.waveX = [];
       if (this.drawing) { this.engine.end(); this.drawing = false; }
       this.engine.clear();
