@@ -28,7 +28,7 @@ class GestureStabilizer {
     this.entryType = null;    // Which discrete gesture we're trying to enter
     this.entryCount = 0;      // Consecutive frames of entryType
 
-    this.EXIT_FRAMES = 6;     // Frames before leaving paint/hover/pinch
+    this.EXIT_FRAMES = 10;    // Frames before leaving paint/hover/pinch
     this.ENTRY_FRAMES = 5;    // Frames before entering undo/menu/fist
   }
 
@@ -69,8 +69,8 @@ class GestureStabilizer {
 
     // For non-discrete target (or threshold met): switch immediately
     // UNLESS we're currently painting and target is 'unknown'
-    // (unknown is noisy, give it extra exit frames)
-    if (this.stable === 'paint' && rawType === 'unknown' && this.exitCount < this.EXIT_FRAMES + 4) {
+    // ('unknown' is noisy — give it extra exit frames)
+    if (this.stable === 'paint' && rawType === 'unknown' && this.exitCount < this.EXIT_FRAMES + 8) {
       return this.stable;
     }
 
@@ -115,7 +115,8 @@ class HandPaintApp {
 
     // Hand loss grace period — keep painting briefly when hand disappears
     this.handLostFrames = 0;
-    this.HAND_LOST_GRACE = 10; // frames before giving up
+    this.HAND_LOST_GRACE = 30; // frames before giving up (~1 second)
+    this.lastPaintPos = null;  // Last known paint position for continuity
 
     // Wave gesture detection (for clear canvas)
     this.wristHistory = [];     // Last N wrist X positions
@@ -202,12 +203,15 @@ class HandPaintApp {
     const paintHand = this.tracker.getPaintHand();
 
     if (!paintHand) {
-      // Hand lost — grace period: keep drawing for N frames
+      // Hand lost — grace period: keep painting at last position
       this.handLostFrames++;
       if (this.handLostFrames <= this.HAND_LOST_GRACE) {
-        // Still within grace period — keep last gesture state
+        // Continue painting at last known position for stroke continuity
+        if (this.isDrawing && this.lastPaintPos) {
+          this.engine.continueStroke(this.lastPaintPos);
+        }
         this.ui.setGesture(`Lost? ${this.HAND_LOST_GRACE - this.handLostFrames + 1}`, '#888');
-        return; // Don't stop drawing yet
+        return;
       }
 
       // Grace period expired — actually stop
@@ -335,6 +339,7 @@ class HandPaintApp {
     if (cw <= 0 || ch <= 0) return;
 
     const pos = mapToCanvas(data.position, cw, ch);
+    this.lastPaintPos = pos; // Save for continuity during brief hand loss
 
     // Reset pinch state when entering paint mode
     this.pinchActive = false;

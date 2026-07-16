@@ -20,7 +20,7 @@ const MODEL_OPTIONS = {
   minFaceDetectionConfidence: 0.3,
   minFaceTrackingConfidence: 0.3,
   minHandDetectionConfidence: 0.4,   // Lower = detects hands more easily
-  minHandTrackingConfidence: 0.3,    // Lower = keeps tracking longer
+  minHandTrackingConfidence: 0.2,    // Very sticky — keeps tracking during fast movement
   minPoseDetectionConfidence: 0.3,
   minPoseTrackingConfidence: 0.3,
   minFacePresenceConfidence: 0.3,
