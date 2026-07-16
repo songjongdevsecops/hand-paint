@@ -45,7 +45,6 @@ export class HandTracker {
     this._lastHands = [];
     this._skeletonFramesLeft = 0;
     this._SKELETON_PERSIST = 15; // frames to persist after detection loss
-    this._didLogSkeleton = false;
   }
 
   async initialize(videoElement, onProgress) {
@@ -77,15 +76,24 @@ export class HandTracker {
 
   async _startCamera() {
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user',
-          frameRate: { ideal: 30 }
-        },
-        audio: false
-      });
+      // Wrap getUserMedia with a timeout so we don't hang forever
+      // if the user ignores the permission prompt
+      const cameraTimeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Camera permission timeout — please allow camera access and reload')), 15000)
+      );
+
+      this.stream = await Promise.race([
+        navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: 'user',
+            frameRate: { ideal: 30 }
+          },
+          audio: false
+        }),
+        cameraTimeout
+      ]);
 
       this.video.srcObject = this.stream;
 
@@ -182,102 +190,51 @@ export class HandTracker {
   drawSkeleton(ctx, w, h) {
     const hands = this.getHands();
 
-    // DEBUG: bright yellow rect in top-left to prove drawSkeleton is called
-    ctx.fillStyle = 'rgba(255,255,0,0.7)';
-    ctx.fillRect(10, 10, 40, 40);
-
-    // Persistence: keep rendering last known hands for a bit after loss
+    // Persistence: keep rendering last known hands briefly after loss
     if (hands.length > 0) {
       this._lastHands = hands;
       this._skeletonFramesLeft = this._SKELETON_PERSIST;
     } else if (this._skeletonFramesLeft > 0) {
       this._skeletonFramesLeft--;
     } else {
-      // DEBUG: red rect = no hands, persistence expired
-      ctx.fillStyle = 'rgba(255,0,0,0.7)';
-      ctx.fillRect(10, 60, 40, 40);
       return;
     }
 
-    // DEBUG: blue rect = hands exist, about to draw skeleton
-    ctx.fillStyle = 'rgba(0,100,255,0.7)';
-    ctx.fillRect(10, 110, 40, 40);
+    for (const h of this._lastHands) {
+      const lm = h.landmarks;
+      if (!lm || lm.length < 21) continue;
+      const isRight = h.handedness === 'right';
 
-    // Draw red circle at center BEFORE the loop — proves we reach this code
-    ctx.fillStyle = '#ff0000';
-    ctx.beginPath();
-    ctx.arc(w / 2, h / 2, 100, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 4;
-    ctx.stroke();
+      // 3-layer intense skeleton: thick glow → medium solid → thin bright core
+      this._drawConnections(ctx, lm, w, h, isRight ? 'rgba(255,20,147,0.35)' : 'rgba(0,255,255,0.35)', 14);
+      this._drawConnections(ctx, lm, w, h, isRight ? 'rgba(255,20,147,0.8)' : 'rgba(0,255,255,0.8)', 5);
+      this._drawConnections(ctx, lm, w, h, isRight ? '#ff69b4' : '#80ffff', 2);
 
-    // Log _lastHands structure
-    console.log('[SKELETON DEBUG] _lastHands length:', this._lastHands.length);
-    
-    for (let hi = 0; hi < this._lastHands.length; hi++) {
-      try {
-        const h = this._lastHands[hi];
-        console.log('[SKELETON DEBUG] hand[' + hi + '] keys:', Object.keys(h), 'landmarks:', typeof h.landmarks, Array.isArray(h.landmarks), h.landmarks?.length);
-        
-        const lm = h.landmarks;
-        if (!lm || lm.length < 21) {
-          console.log('[SKELETON DEBUG] SKIPPED hand[' + hi + '] — invalid landmarks');
-          continue;
-        }
-        
-        // Try accessing first landmark
-        const first = lm[0];
-        console.log('[SKELETON DEBUG] lm[0]:', first, 'type:', typeof first, 'x:', first?.x, 'y:', first?.y);
-        
-        // Draw yellow at wrist
-        const x0 = this._mirrorX(first.x, w);
-        const y0 = first.y * h;
-        console.log('[SKELETON DEBUG] wrist screen pos:', x0, y0);
-        
-        ctx.fillStyle = '#ffff00';
-        ctx.beginPath();
-        ctx.arc(x0, y0, 40, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-        console.log('[SKELETON DEBUG] wrist circle drawn at', x0, y0);
-        
-        // Draw all landmarks
-        for (let i = 0; i < lm.length; i++) {
-          const p = lm[i];
-          if (!p || typeof p.x !== 'number') continue;
-          const x = this._mirrorX(p.x, w);
-          const y = p.y * h;
-          ctx.fillStyle = i === 8 ? '#ff0000' : '#00ff00';
-          ctx.beginPath();
-          ctx.arc(x, y, 15, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 3;
-          ctx.stroke();
-        }
-        console.log('[SKELETON DEBUG] all', lm.length, 'landmark circles drawn');
-      } catch(e) {
-        console.error('[SKELETON DEBUG] ERROR in hand[' + hi + ']:', e.message, e.stack);
-        // Draw error indicator
-        ctx.fillStyle = '#ff0000';
-        ctx.fillRect(200, 10, 50, 50);
-      }
-    }
-        const p = lm[i];
-        if (!p || typeof p.x !== 'number') continue;
+      // Joint dots with glow ring + solid core
+      for (const p of lm) {
         const x = this._mirrorX(p.x, w);
         const y = p.y * h;
-        
-        ctx.fillStyle = i === 8 ? '#ff0000' : '#00ff00';
+        ctx.fillStyle = isRight ? 'rgba(255,20,147,0.5)' : 'rgba(0,255,255,0.5)';
         ctx.beginPath();
-        ctx.arc(x, y, 15, 0, Math.PI * 2);
+        ctx.arc(x, y, 7, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3;
-        ctx.stroke();
+        ctx.fillStyle = isRight ? '#ff69b4' : '#ffffff';
+        ctx.beginPath();
+        ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Bright white dots at all 5 fingertips
+      const tips = [4, 8, 12, 16, 20];
+      for (const tipIdx of tips) {
+        const t = lm[tipIdx];
+        if (!t) continue;
+        const tx = this._mirrorX(t.x, w);
+        const ty = t.y * h;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(tx, ty, 5, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
   }
