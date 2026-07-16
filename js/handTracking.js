@@ -207,20 +207,39 @@ export class HandTracker {
       const lm = h.landmarks;
       if (!lm || lm.length < 21) continue;
 
-      // BRUTAL DEBUG: draw giant circles at each landmark
+      // Draw a hardcoded circle at screen center to prove drawing works
+      ctx.fillStyle = '#ff0000';
+      ctx.beginPath();
+      ctx.arc(w / 2, h / 2, 100, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      // Log first landmark to console
+      const first = lm[0];
+      console.log('[SKELETON DEBUG] Landmark[0]:', JSON.stringify(first), 'w:', w, 'h:', h);
+      console.log('[SKELETON DEBUG] Computed pos:', this._mirrorX(first.x, w), first.y * h);
+
+      // Draw at landmark 0 position with giant circle
+      const x0 = this._mirrorX(first.x, w);
+      const y0 = first.y * h;
+      ctx.fillStyle = '#ffff00';
+      ctx.beginPath();
+      ctx.arc(x0, y0, 30, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw all landmarks
       for (let i = 0; i < lm.length; i++) {
         const p = lm[i];
         if (!p || typeof p.x !== 'number') continue;
         const x = this._mirrorX(p.x, w);
         const y = p.y * h;
         
-        // Giant filled circle
         ctx.fillStyle = i === 8 ? '#ff0000' : '#00ff00';
         ctx.beginPath();
         ctx.arc(x, y, 15, 0, Math.PI * 2);
         ctx.fill();
-        
-        // White outline
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 3;
         ctx.stroke();
