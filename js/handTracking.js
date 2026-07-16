@@ -42,7 +42,7 @@ export class HandTracker {
     this.detectionTime = 0;
 
     // Landmark smoothing — EMA to reduce jitter
-    this._smoothFactor = 0.25; // lower = smoother (0=no movement, 1=raw)
+    this._smoothFactor = 0.20; // lower = smoother (0=no movement, 1=raw)
     this._smoothedLandmarks = null; // { left: [hands], right: [hands] }
 
     // Skeleton persistence — keep rendering last known skeleton briefly after loss
@@ -212,9 +212,9 @@ export class HandTracker {
       const color = hand.handedness === 'right' ? '#ff1493' : '#00ffff';
 
       // Thick glow
-      this._drawConnections(ctx, landmarks, w, h, color + '55', 8);
+      this._drawConnections(ctx, landmarks, w, h, color + '55', 12);
       // Solid lines
-      this._drawConnections(ctx, landmarks, w, h, color + 'cc', 3);
+      this._drawConnections(ctx, landmarks, w, h, color + 'cc', 5);
 
       // Draw joint dots
       for (const lm of landmarks) {
@@ -222,7 +222,7 @@ export class HandTracker {
         const y = lm.y * h;
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.arc(x, y, 7, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -233,7 +233,7 @@ export class HandTracker {
         if (!t) continue;
         ctx.fillStyle = '#fff';
         ctx.beginPath();
-        ctx.arc(w - (t.x * w), t.y * h, 6, 0, Math.PI * 2);
+        ctx.arc(w - (t.x * w), t.y * h, 8, 0, Math.PI * 2);
         ctx.fill();
       }
     }
