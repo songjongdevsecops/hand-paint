@@ -1,72 +1,56 @@
-// gestures.js — Hybrid: 3D angle when available, 2D distance fallback
+// gestures.js — Simple explicit gesture detection
 
-const FINGERS = {
-  thumb:  [2, 3, 4],
-  index:  [5, 6, 8],
-  middle: [9, 10, 12],
-  ring:   [13, 14, 16],
-  pinky:  [17, 18, 20]
-};
-
-function v3(x, y, z) { return { x, y, z: z || 0 }; }
-function sub(a, b) { return { x: a.x - b.x, y: a.y - b.y, z: (a.z || 0) - (b.z || 0) }; }
-function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-function len(v) { return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
-function dist(a, b) { return len(sub(a, b)); }
-
-export function getExtendedFingers(lm, wlm) {
-  if (!lm || lm.length < 21) return [];
-  const ex = [];
-  const wrist = lm[0];
-  // Check if we have real 3D data (z != 0)
-  const has3D = wlm && wlm[0] && typeof wlm[0].z === 'number' && Math.abs(wlm[0].z) > 0.0001;
-
-  for (const [name, [mcp, pip, tip]] of Object.entries(FINGERS)) {
-    if (!lm[mcp] || !lm[pip] || !lm[tip]) continue;
-
-    if (has3D) {
-      const a = v3(wlm[mcp].x, wlm[mcp].y, wlm[mcp].z);
-      const b = v3(wlm[pip].x, wlm[pip].y, wlm[pip].z);
-      const c = v3(wlm[tip].x, wlm[tip].y, wlm[tip].z);
-      const d = dot(sub(b, a), sub(c, b));
-      const m = len(sub(b, a)) * len(sub(c, b));
-      const ang = m < 1e-10 ? 180 : Math.acos(Math.max(-1, Math.min(1, d / m))) * (180 / Math.PI);
-      if (ang > (name === 'thumb' ? 110 : 135)) ex.push(name);
-    } else {
-      // 2D distance-from-wrist (proven reliable)
-      const wt = dist(wrist, lm[tip]);
-      const wp = dist(wrist, lm[pip]);
-      const wm = dist(wrist, lm[mcp]);
-      if (name === 'thumb') {
-        if (dist(lm[tip], lm[5]) > dist(lm[pip], lm[5]) * 1.15) ex.push(name);
-      } else {
-        if (wt > wp * 1.08 && wp > wm * 1.02) ex.push(name);
-      }
-    }
-  }
-  return ex;
+function d(a, b) {
+  const dx = a.x - b.x, dy = a.y - b.y, dz = (a.z || 0) - (b.z || 0);
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
 }
 
-export function isPinching(lm, wlm) {
-  if (wlm && wlm[4] && wlm[8]) return dist(v3(wlm[4].x, wlm[4].y, wlm[4].z), v3(wlm[8].x, wlm[8].y, wlm[8].z)) < 0.04;
-  return dist(v3(lm[4].x, lm[4].y, 0), v3(lm[8].x, lm[8].y, 0)) < 0.06;
+// Check if a finger is extended: tip farther from wrist than PIP
+function extended(lm, tip, pip) {
+  return d(lm[0], lm[tip]) > d(lm[0], lm[pip]) * 1.04;
 }
 
 export function classify(lm, wlm) {
   if (!lm || lm.length < 21) return { type: 'none' };
-  const ext = getExtendedFingers(lm, wlm);
-  const n = ext.length;
-  const pinch = isPinching(lm, wlm);
-  const idx = lm[8], wrist = lm[0];
+  const W = lm[0];
 
-  if (n === 0) return { type: 'fist' };
-  if (n === 1 && ext[0] === 'pinky') return { type: 'undo' };
-  if (n === 1 && ext[0] === 'thumb') return { type: 'none' };
-  if (n === 1 && ext[0] === 'index') return { type: 'paint', pos: idx };
-  if (n === 2 && ext.includes('index') && ext.includes('middle')) return { type: 'hover', pos: idx };
-  if (pinch) return { type: 'pinch', pos: wrist };
-  if (n >= 5) return { type: 'menu' };
-  return { type: 'none', pos: idx };
+  // Individual finger state
+  const thumbUp = d(lm[4], lm[5]) > d(lm[3], lm[5]) * 1.1;  // thumb away from index MCP
+  const indexUp = extended(lm, 8, 6);
+  const middleUp = extended(lm, 12, 10);
+  const ringUp = extended(lm, 16, 14);
+  const pinkyUp = extended(lm, 20, 18);
+
+  const fingersUp = [thumbUp, indexUp, middleUp, ringUp, pinkyUp];
+  const count = fingersUp.filter(Boolean).length;
+
+  // Pinch: thumb tip near index tip
+  const pinch = d(lm[4], lm[8]) < 0.06;
+
+  // ---- Classification ----
+
+  // Pinch overrides everything
+  if (pinch) return { type: 'pinch', pos: W };
+
+  // All 5 up = menu
+  if (count >= 5) return { type: 'menu' };
+
+  // Only pinky up = undo
+  if (pinkyUp && !indexUp && !middleUp && !ringUp && count <= 2) return { type: 'undo' };
+
+  // Only index = paint
+  if (indexUp && !middleUp && count <= 2) return { type: 'paint', pos: lm[8] };
+
+  // Index + middle = hover
+  if (indexUp && middleUp && count <= 3) return { type: 'hover', pos: lm[8] };
+
+  // No fingers = fist
+  if (count === 0) return { type: 'fist' };
+
+  // Fallback: if index is up, paint anyway
+  if (indexUp) return { type: 'paint', pos: lm[8] };
+
+  return { type: 'none', pos: lm[8] };
 }
 
 export function toCanvas(lm, cw, ch) {
