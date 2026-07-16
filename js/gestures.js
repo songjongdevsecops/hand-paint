@@ -161,8 +161,9 @@ export function classifyGesture(landmarks) {
   }
 
   // Pinch gesture → brush size via vertical movement
+  // Use wrist position as reference (stable) rather than index tip (moves during pinch)
   if (pinch && (extended.includes('thumb') || extended.includes('index'))) {
-    return { type: 'pinch', data: { position: indexTip } };
+    return { type: 'pinch', data: { position: landmarks[LM.WRIST] } };
   }
 
   // All 5 fingers spread → menu toggle

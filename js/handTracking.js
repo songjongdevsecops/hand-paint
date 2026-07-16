@@ -175,38 +175,29 @@ export class HandTracker {
 
   /**
    * Draw the hand skeleton overlay on the given canvas context.
-   * Persists the last known skeleton for a few frames after detection drops
-   * to prevent flickering.
+   * Only renders the paint hand (single hand — avoids visual confusion).
+   * Persists the last known skeleton briefly after detection drops.
    */
   drawSkeleton(ctx, w, h) {
-    const hands = this.getHands();
+    const hand = this.getPaintHand();
 
-    // Update persistence
-    if (hands.length > 0) {
-      this._lastHands = hands;
+    if (hand) {
+      this._lastHands = [hand];
       this._skeletonFramesLeft = this._SKELETON_PERSIST;
     } else if (this._skeletonFramesLeft > 0) {
       this._skeletonFramesLeft--;
     } else {
-      return; // Nothing to draw
+      return;
     }
 
-    const drawSet = hands.length > 0 ? hands : this._lastHands;
-
-    for (const hand of drawSet) {
-      const lm = hand.landmarks;
-      const isRight = hand.handedness === 'right';
-
-      // Glow color — right hand pink, left hand cyan
+    for (const h of this._lastHands) {
+      const lm = h.landmarks;
+      const isRight = h.handedness === 'right';
       const color = isRight ? '#ff1493' : '#00ffff';
 
-      // Draw semi-transparent thick connections (glow)
       this._drawConnections(ctx, lm, w, h, color + '44', isRight ? 8 : 6);
-
-      // Draw thinner solid connections
       this._drawConnections(ctx, lm, w, h, color + 'cc', isRight ? 3 : 2);
 
-      // Draw joint dots
       for (const p of lm) {
         const x = this._mirrorX(p.x, w);
         const y = p.y * h;

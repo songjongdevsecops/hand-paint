@@ -41,7 +41,7 @@ export class PaintEngine {
     this.maxHistory = 20;
 
     // Opacity controls
-    this.cameraOpacity = 0.3;    // 0-1, default 30%
+    this.cameraOpacity = 0.05;   // Start near-black, user adjusts up
 
     // Skeleton drawing callback (set by main.js)
     this.skeletonRenderer = null;

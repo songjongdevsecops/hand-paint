@@ -108,15 +108,20 @@ class HandPaintApp {
     this.undoDebounce = 1200;
     this.menuDebounce = 1000;
 
-    // Fist timer
-    this.fistStartTime = 0;
-    this.fistHoldRequired = 1500;
-    this.fistCleared = false;
-
     // Pinch + vertical brush size control
     this.pinchActive = false;
     this.pinchStartY = null;
     this.pinchBaseSize = 8;
+
+    // Hand loss grace period — keep painting briefly when hand disappears
+    this.handLostFrames = 0;
+    this.HAND_LOST_GRACE = 10; // frames before giving up
+
+    // Wave gesture detection (for clear canvas)
+    this.wristHistory = [];     // Last N wrist X positions
+    this.WAVE_WINDOW = 25;      // frames to track
+    this.WAVE_MIN_CROSSINGS = 4; // direction changes to trigger clear
+    this.lastWaveClear = 0;     // debounce timestamp
 
     // Render loop
     this._rafId = null;
@@ -195,20 +200,35 @@ class HandPaintApp {
 
   _onFrame(results, timestamp) {
     const paintHand = this.tracker.getPaintHand();
+
     if (!paintHand) {
+      // Hand lost — grace period: keep drawing for N frames
+      this.handLostFrames++;
+      if (this.handLostFrames <= this.HAND_LOST_GRACE) {
+        // Still within grace period — keep last gesture state
+        this.ui.setGesture(`Lost? ${this.HAND_LOST_GRACE - this.handLostFrames + 1}`, '#888');
+        return; // Don't stop drawing yet
+      }
+
+      // Grace period expired — actually stop
       this.ui.setGesture('Searching...', '#888');
       if (this.isDrawing) { this.engine.endStroke(); this.isDrawing = false; }
       this.stabilizer.reset();
+      this.pinchActive = false;
+      this.wristHistory = [];
       return;
     }
+
+    // Hand found — reset lost counter
+    this.handLostFrames = 0;
 
     const landmarks = paintHand.landmarks;
     const rawGesture = classifyGesture(landmarks);
     const stableType = this.stabilizer.update(rawGesture.type);
-
-    // Build a stabilized gesture object using the raw gesture's data
-    // but the stabilized type
     const stableGesture = { ...rawGesture, type: stableType };
+
+    // Track wrist for wave detection
+    this._trackWave(landmarks[0], timestamp);
 
     this._handleGesture(stableGesture, landmarks, timestamp);
     this.currentGesture = stableType;
@@ -248,9 +268,60 @@ class HandPaintApp {
         break;
     }
 
-    if (type !== 'fist') {
-      this.fistStartTime = 0;
-      this.fistCleared = false;
+    // Reset pinch state if not pinching
+    if (type !== 'pinch') {
+      this.pinchActive = false;
+      this.pinchStartY = null;
+    }
+  }
+
+  /* ---- Wave detection for clear canvas ---- */
+
+  /**
+   * Track wrist X position to detect side-to-side waving.
+   * Triggers canvas clear when oscillation exceeds thresholds.
+   */
+  _trackWave(wrist, timestamp) {
+    // Mirror X to match screen coordinates
+    const x = 1 - wrist.x;
+
+    this.wristHistory.push(x);
+    if (this.wristHistory.length > this.WAVE_WINDOW) {
+      this.wristHistory.shift();
+    }
+
+    // Need enough history
+    if (this.wristHistory.length < this.WAVE_WINDOW) return;
+
+    // Count direction changes (zero crossings of the derivative)
+    let crossings = 0;
+    let prevDir = 0;
+
+    for (let i = 1; i < this.wristHistory.length; i++) {
+      const delta = this.wristHistory[i] - this.wristHistory[i - 1];
+      const dir = delta > 0.005 ? 1 : delta < -0.005 ? -1 : 0;
+      if (dir !== 0 && dir !== prevDir && prevDir !== 0) {
+        crossings++;
+      }
+      if (dir !== 0) prevDir = dir;
+    }
+
+    // Also check amplitude (range of X positions)
+    const xMin = Math.min(...this.wristHistory);
+    const xMax = Math.max(...this.wristHistory);
+    const amplitude = xMax - xMin;
+
+    // Trigger clear: enough crossings AND enough amplitude
+    if (crossings >= this.WAVE_MIN_CROSSINGS && amplitude > 0.08) {
+      const now = performance.now();
+      if (now - this.lastWaveClear > 2500) { // Debounce 2.5s
+        this.lastWaveClear = now;
+        this.wristHistory = [];
+        if (this.isDrawing) { this.engine.endStroke(); this.isDrawing = false; }
+        this._doClear();
+        this.ui.setGesture('👋 Wave — Cleared!', '#ff8c00');
+        setTimeout(() => this.ui.setGesture('Ready', '#888'), 1000);
+      }
     }
   }
 
@@ -283,22 +354,8 @@ class HandPaintApp {
 
   _handleFist(timestamp) {
     if (this.isDrawing) { this.engine.endStroke(); this.isDrawing = false; }
-
-    if (this.fistStartTime === 0) {
-      this.fistStartTime = timestamp;
-      this.fistCleared = false;
-    }
-
-    const elapsed = timestamp - this.fistStartTime;
-    const remaining = Math.ceil((this.fistHoldRequired - elapsed) / 1000);
-    if (remaining > 0) {
-      this.ui.setGesture(`✊ Hold ${remaining}s to clear`, '#ff4444');
-    }
-
-    if (elapsed >= this.fistHoldRequired && !this.fistCleared) {
-      this._doClear();
-      this.fistCleared = true;
-    }
+    // Fist no longer clears — use wave gesture (👋) to clear
+    this.ui.setGesture('✊ Fist', '#ff4444');
   }
 
   _handleUndoGesture(timestamp) {

@@ -144,7 +144,7 @@ export class UI {
       this.el.cameraOpacityVal.textContent = Math.round(val * 100) + '%';
       cb(val);
     });
-    this.el.cameraOpacityVal.textContent = '30%';
+    this.el.cameraOpacityVal.textContent = '5%';
   }
 
   /* ---- Action buttons ---- */
