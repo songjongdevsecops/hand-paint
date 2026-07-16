@@ -203,32 +203,35 @@ export class HandTracker {
     ctx.fillStyle = 'rgba(0,100,255,0.7)';
     ctx.fillRect(10, 110, 40, 40);
 
+    // Draw red circle at center BEFORE the loop — proves we reach this code
+    ctx.fillStyle = '#ff0000';
+    ctx.beginPath();
+    ctx.arc(w / 2, h / 2, 100, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    // Log _lastHands structure
+    console.log('[SKELETON DEBUG] _lastHands length:', this._lastHands.length);
+    
     for (const h of this._lastHands) {
+      console.log('[SKELETON DEBUG] hand keys:', Object.keys(h), 'landmarks type:', typeof h.landmarks, 'isArray:', Array.isArray(h.landmarks), 'length:', h.landmarks?.length);
       const lm = h.landmarks;
-      if (!lm || lm.length < 21) continue;
-
-      // Draw a hardcoded circle at screen center to prove drawing works
-      ctx.fillStyle = '#ff0000';
-      ctx.beginPath();
-      ctx.arc(w / 2, h / 2, 100, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 4;
-      ctx.stroke();
-
-      // Log first landmark to console
-      const first = lm[0];
-      console.log('[SKELETON DEBUG] Landmark[0]:', JSON.stringify(first), 'w:', w, 'h:', h);
-      console.log('[SKELETON DEBUG] Computed pos:', this._mirrorX(first.x, w), first.y * h);
-
-      // Draw at landmark 0 position with giant circle
-      const x0 = this._mirrorX(first.x, w);
-      const y0 = first.y * h;
+      if (!lm || lm.length < 21) {
+        console.log('[SKELETON DEBUG] SKIPPED — lm invalid');
+        continue;
+      }
+      console.log('[SKELETON DEBUG] lm[0]:', lm[0]);
+      
+      // Draw yellow at wrist
+      const x0 = this._mirrorX(lm[0].x, w);
+      const y0 = lm[0].y * h;
       ctx.fillStyle = '#ffff00';
       ctx.beginPath();
       ctx.arc(x0, y0, 30, 0, Math.PI * 2);
       ctx.fill();
-
+      
       // Draw all landmarks
       for (let i = 0; i < lm.length; i++) {
         const p = lm[i];
