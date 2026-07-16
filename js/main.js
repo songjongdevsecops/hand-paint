@@ -140,9 +140,16 @@ class App {
   _pinch(pos) {
     if (this.drawing) { this.engine.end(); this.drawing = false; }
     if (!pos) return;
-    const y = pos.y;
-    if (!this.pinchOn) { this.pinchOn = true; this.pinchY0 = y; this.pinchBase = this.engine.brush.size; }
-    else this.engine.setSize(this.pinchBase + (this.pinchY0 - y) * 60);
+    const y = pos.y; // 0=top, 1=bottom
+    // Upper 1/3 = increase, lower 1/3 = decrease, middle = hold
+    if (y < 0.33) {
+      // Holding up: ramp up continuously
+      this.engine.setSize(this.engine.brush.size + 0.5);
+    } else if (y > 0.66) {
+      // Holding down: ramp down continuously
+      this.engine.setSize(this.engine.brush.size - 0.5);
+    }
+    // Middle: hold current size
   }
 
   _nextColor() {
