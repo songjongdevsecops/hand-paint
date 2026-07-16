@@ -190,7 +190,6 @@ export class HandTracker {
   drawSkeleton(ctx, w, h) {
     const hands = this.getHands();
 
-    // Persistence: keep rendering last known hands briefly after loss
     if (hands.length > 0) {
       this._lastHands = hands;
       this._skeletonFramesLeft = this._SKELETON_PERSIST;
@@ -200,40 +199,21 @@ export class HandTracker {
       return;
     }
 
-    for (const h of this._lastHands) {
-      const lm = h.landmarks;
-      if (!lm || lm.length < 21) continue;
-      const isRight = h.handedness === 'right';
+    for (const hand of this._lastHands) {
+      const landmarks = hand.landmarks;
+      if (!landmarks || landmarks.length < 21) continue;
+      const color = hand.handedness === 'right' ? '#ff1493' : '#00ffff';
 
-      // 3-layer intense skeleton: thick glow → medium solid → thin bright core
-      this._drawConnections(ctx, lm, w, h, isRight ? 'rgba(255,20,147,0.35)' : 'rgba(0,255,255,0.35)', 14);
-      this._drawConnections(ctx, lm, w, h, isRight ? 'rgba(255,20,147,0.8)' : 'rgba(0,255,255,0.8)', 5);
-      this._drawConnections(ctx, lm, w, h, isRight ? '#ff69b4' : '#80ffff', 2);
+      // Draw connections — exact same code that worked in v1
+      this._drawConnections(ctx, landmarks, w, h, color + '88', 2);
 
-      // Joint dots with glow ring + solid core
-      for (const p of lm) {
-        const x = this._mirrorX(p.x, w);
-        const y = p.y * h;
-        ctx.fillStyle = isRight ? 'rgba(255,20,147,0.5)' : 'rgba(0,255,255,0.5)';
+      // Draw landmarks
+      for (const lm of landmarks) {
+        const x = w - (lm.x * w);
+        const y = lm.y * h;
+        ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.arc(x, y, 7, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = isRight ? '#ff69b4' : '#ffffff';
-        ctx.beginPath();
-        ctx.arc(x, y, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Bright white dots at all 5 fingertips
-      const tips = [4, 8, 12, 16, 20];
-      for (const tipIdx of tips) {
-        const t = lm[tipIdx];
-        if (!t) continue;
-        const tx = this._mirrorX(t.x, w);
-        const ty = t.y * h;
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(tx, ty, 5, 0, Math.PI * 2);
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
         ctx.fill();
       }
     }

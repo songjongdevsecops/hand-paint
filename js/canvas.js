@@ -14,7 +14,6 @@ export class PaintEngine {
   constructor(canvasElement) {
     this.canvas = canvasElement;
     this.ctx = canvasElement.getContext('2d', {
-      alpha: false,
       desynchronized: true
     });
 
