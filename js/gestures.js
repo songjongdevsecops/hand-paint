@@ -36,7 +36,7 @@ export function getExtendedFingers(lm, wlm) {
       c = v3(lm[tip].x, lm[tip].y, 0);
     }
     const ang = angleDeg(sub(b, a), sub(c, b));
-    const th = name === 'thumb' ? 130 : 155;
+    const th = name === 'thumb' ? 110 : 135;
     if (ang > th) ex.push(name);
   }
   return ex;
