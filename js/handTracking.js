@@ -206,47 +206,24 @@ export class HandTracker {
     for (const h of this._lastHands) {
       const lm = h.landmarks;
       if (!lm || lm.length < 21) continue;
-      const isRight = h.handedness === 'right';
 
-      // Intense colors — right hand hot pink, left hand bright cyan
-      const color = isRight ? '#ff1493' : '#00ffff';
-
-      // Thick glow layer
-      this._drawConnections(ctx, lm, w, h, isRight ? 'rgba(255,20,147,0.4)' : 'rgba(0,255,255,0.4)', 12);
-      // Medium solid layer
-      this._drawConnections(ctx, lm, w, h, isRight ? 'rgba(255,20,147,0.85)' : 'rgba(0,255,255,0.85)', 4);
-      // Thin bright core
-      this._drawConnections(ctx, lm, w, h, isRight ? '#ff69b4' : '#80ffff', 2);
-
-      // Draw joint dots — larger, with glow
-      for (const p of lm) {
+      // BRUTAL DEBUG: draw giant circles at each landmark
+      for (let i = 0; i < lm.length; i++) {
+        const p = lm[i];
+        if (!p || typeof p.x !== 'number') continue;
         const x = this._mirrorX(p.x, w);
         const y = p.y * h;
-
-        // Glow
-        ctx.fillStyle = isRight ? 'rgba(255,20,147,0.5)' : 'rgba(0,255,255,0.5)';
+        
+        // Giant filled circle
+        ctx.fillStyle = i === 8 ? '#ff0000' : '#00ff00';
         ctx.beginPath();
-        ctx.arc(x, y, 8, 0, Math.PI * 2);
+        ctx.arc(x, y, 15, 0, Math.PI * 2);
         ctx.fill();
-
-        // Core
-        ctx.fillStyle = isRight ? '#ff69b4' : '#ffffff';
-        ctx.beginPath();
-        ctx.arc(x, y, 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Bright fingertip dots (make fingertips extra visible)
-      const tips = [4, 8, 12, 16, 20]; // thumb, index, middle, ring, pinky
-      for (const tipIdx of tips) {
-        const t = lm[tipIdx];
-        if (!t) continue;
-        const tx = this._mirrorX(t.x, w);
-        const ty = t.y * h;
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(tx, ty, 5, 0, Math.PI * 2);
-        ctx.fill();
+        
+        // White outline
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
       }
     }
   }
