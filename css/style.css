@@ -1,364 +1,48 @@
-/* ============================================================
-   Hand Paint — CSS v2
-   Dark theme, full-viewport, opacity controls
-   ============================================================ */
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:system-ui,sans-serif;color:#fff;user-select:none;-webkit-user-select:none;touch-action:none}
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+#webcam{position:fixed;top:0;left:0;width:2px;height:2px;opacity:.01;pointer-events:none;z-index:-1}
+#canvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;cursor:none}
 
-:root {
-  --bg: #0d0d0d;
-  --surface: #1a1a2e;
-  --surface-light: #252540;
-  --accent: #ff1493;
-  --accent-dim: #ff149380;
-  --text: #e0e0e0;
-  --text-dim: #888;
-  --radius: 10px;
-  --transition: 0.2s ease;
-}
+#hud{position:fixed;top:12px;left:12px;z-index:10;display:flex;flex-direction:column;gap:6px}
+#brushPreview,#gestureLabel{background:#1a1a2e;border:1px solid #ff149380;border-radius:8px;padding:8px 12px;font-size:13px;display:flex;align-items:center;gap:8px;box-shadow:0 2px 12px #0006}
+#brushDot{width:22px;height:22px;border-radius:50%;background:#ff1493;border:2px solid #fff3;flex-shrink:0}
+#gestureLabel{color:#ff1493;font-weight:600;min-width:100px}
 
-html, body {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: var(--bg);
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  color: var(--text);
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: none;
-}
+#opacityPanel{position:fixed;top:110px;left:12px;z-index:10;background:#1a1a2e;border:1px solid #ff149380;border-radius:8px;padding:8px 12px;font-size:12px;display:flex;align-items:center;gap:8px;box-shadow:0 2px 12px #0006}
+#opacityPanel input[type=range]{width:80px;accent-color:#ff1493}
+#camOpacityVal{color:#ff1493;font-weight:600;min-width:28px;text-align:right}
 
-/* ---- Hidden webcam (offscreen but rendered) ---- */
+#statusBar{position:fixed;top:12px;right:12px;z-index:10;background:#1a1a2e;border:1px solid #ff149380;border-radius:8px;padding:4px 10px;font-size:11px;color:#888;box-shadow:0 2px 12px #0006}
 
-#webcam {
-  position: fixed;
-  top: 0; left: 0;
-  width: 2px; height: 2px;
-  opacity: 0.01;
-  pointer-events: none;
-  z-index: -1;
-}
+#actions{position:fixed;bottom:20px;right:12px;z-index:10;display:flex;flex-direction:column;gap:8px}
+#actions button{width:44px;height:44px;border-radius:50%;border:2px solid #ff149380;background:#1a1a2e;color:#fff;font-size:18px;cursor:pointer;transition:all .15s;box-shadow:0 2px 12px #0006}
+#actions button:hover{background:#ff1493;border-color:#ff1493;transform:scale(1.08)}
 
-/* ---- Main Canvas ---- */
+#palette{position:fixed;top:50%;left:16px;transform:translateY(-50%);z-index:10;background:#1a1a2e;border:1px solid #ff149380;border-radius:10px;padding:10px;box-shadow:0 4px 20px #0006;transition:opacity .2s,transform .2s}
+#palette.hidden{opacity:0;pointer-events:none;transform:translateY(-50%) translateX(-20px)}
+#colorGrid{display:grid;grid-template-columns:repeat(5,32px);gap:5px}
+#colorGrid div{width:32px;height:32px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:transform .15s}
+#colorGrid div:hover{transform:scale(1.2)}
+#colorGrid div.active{border-color:#fff;box-shadow:0 0 10px currentColor}
 
-#paintCanvas {
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  z-index: 1;
-  cursor: none;
-}
+#loading{position:fixed;inset:0;z-index:100;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+#loading.hidden{display:none}
+.spinner{width:48px;height:48px;border:4px solid #252540;border-top-color:#ff1493;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loadingText{font-size:18px;font-weight:600}
+#loadingBar{width:240px;height:4px;background:#252540;border-radius:2px;overflow:hidden}
+#loadingFill{height:100%;background:#ff1493;width:0%;transition:width .3s}
 
-/* ---- Status Bar (top-right) ---- */
+#error{position:fixed;inset:0;z-index:200;background:#000000ee;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+#error.hidden{display:none}
+#errorMsg{color:#ff4444;font-size:16px;text-align:center;max-width:320px}
+#btnRetry{background:#ff1493;color:#fff;border:none;padding:8px 24px;border-radius:6px;font-size:15px;cursor:pointer}
 
-#statusBar {
-  position: fixed;
-  top: 16px; right: 16px;
-  z-index: 10;
-  background: var(--surface);
-  border: 1px solid var(--accent-dim);
-  border-radius: var(--radius);
-  padding: 6px 12px;
-  font-size: 12px;
-  color: var(--text-dim);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-}
-
-/* ---- Opacity Controls (top-left, under HUD) ---- */
-
-#opacityControls {
-  position: fixed;
-  top: 110px; left: 16px;
-  z-index: 10;
-  background: var(--surface);
-  border: 1px solid var(--accent-dim);
-  border-radius: var(--radius);
-  padding: 10px 14px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 200px;
-}
-
-.opacity-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-}
-
-.opacity-row label {
-  width: 65px;
-  color: var(--text-dim);
-  flex-shrink: 0;
-}
-
-.opacity-row input[type="range"] {
-  flex: 1;
-  height: 4px;
-  -webkit-appearance: none;
-  appearance: none;
-  background: var(--surface-light);
-  border-radius: 2px;
-  outline: none;
-  cursor: pointer;
-}
-
-.opacity-row input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  background: var(--accent);
-  cursor: pointer;
-}
-
-.opacity-row span {
-  width: 36px;
-  text-align: right;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-}
-
-/* ---- Color Palette ---- */
-
-#colorPalette {
-  position: fixed;
-  top: 50%; left: 24px;
-  transform: translateY(-50%);
-  z-index: 10;
-  background: var(--surface);
-  border: 1px solid var(--accent-dim);
-  border-radius: var(--radius);
-  padding: 14px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-  transition: opacity var(--transition), transform var(--transition);
-  max-height: 80vh;
-  overflow-y: auto;
-}
-
-#colorPalette.hidden {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-50%) translateX(-20px);
-}
-
-.panel-title {
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--text-dim);
-  margin-bottom: 10px;
-  text-align: center;
-}
-
-.color-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 36px);
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.color-swatch {
-  width: 36px; height: 36px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: transform var(--transition), border-color var(--transition);
-}
-
-.color-swatch:hover { transform: scale(1.15); }
-.color-swatch.active { border-color: #fff; box-shadow: 0 0 12px currentColor; }
-
-.quick-colors { display: flex; gap: 6px; flex-wrap: wrap; }
-
-.quick-color {
-  width: 28px; height: 28px;
-  border-radius: 6px;
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: transform var(--transition);
-}
-
-.quick-color:hover { transform: scale(1.2); border-color: #fff; }
-
-/* ---- Action Buttons ---- */
-
-#actionsPanel {
-  position: fixed;
-  bottom: 24px; right: 24px;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.action-btn {
-  width: 48px; height: 48px;
-  border-radius: 50%;
-  border: 2px solid var(--accent-dim);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 20px;
-  cursor: pointer;
-  transition: all var(--transition);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-}
-
-.action-btn:hover {
-  background: var(--accent);
-  border-color: var(--accent);
-  transform: scale(1.1);
-  box-shadow: 0 6px 20px rgba(255,20,147,0.4);
-}
-
-.action-btn:active { transform: scale(0.95); }
-
-/* ---- Brush HUD ---- */
-
-#brushHud {
-  position: fixed;
-  top: 16px; left: 16px;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.hud-item {
-  background: var(--surface);
-  border: 1px solid var(--accent-dim);
-  border-radius: var(--radius);
-  padding: 10px 14px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  font-size: 14px;
-}
-
-#brushDot {
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  background: #ff1493;
-  border: 2px solid rgba(255,255,255,0.3);
-  flex-shrink: 0;
-}
-
-#brushSize {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  min-width: 40px;
-}
-
-#gestureLabel {
-  color: var(--accent);
-  font-weight: 500;
-  font-size: 13px;
-}
-
-/* ---- Loading & Error ---- */
-
-#loadingOverlay {
-  position: fixed; inset: 0;
-  z-index: 100;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  transition: opacity 0.5s ease;
-}
-
-#loadingOverlay.fade-out { opacity: 0; pointer-events: none; }
-#loadingOverlay.hidden { display: none; }
-
-.spinner {
-  width: 56px; height: 56px;
-  border: 4px solid var(--surface-light);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-#loadingText { font-size: 20px; font-weight: 600; color: var(--text); }
-.loading-sub { font-size: 14px; color: var(--text-dim); }
-
-#loadingBar {
-  width: 280px; height: 4px;
-  background: var(--surface-light);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-#loadingProgress {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 2px;
-  width: 0%;
-  transition: width 0.3s ease;
-}
-
-#errorOverlay {
-  position: fixed; inset: 0;
-  z-index: 200;
-  background: rgba(0,0,0,0.9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-#errorOverlay.hidden { display: none; }
-
-.error-box {
-  background: var(--surface);
-  border: 1px solid #ff4444;
-  border-radius: var(--radius);
-  padding: 32px 40px;
-  text-align: center;
-  max-width: 400px;
-}
-
-.error-box h2 { color: #ff4444; margin-bottom: 12px; }
-.error-box p { color: var(--text-dim); margin-bottom: 20px; }
-
-#retryBtn {
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  padding: 10px 28px;
-  border-radius: 6px;
-  font-size: 16px;
-  cursor: pointer;
-}
-
-#retryBtn:hover { background: #ff44a3; }
-
-/* ---- Responsive ---- */
-
-@media (max-width: 768px) {
-  #opacityControls { left: 8px; top: 100px; min-width: 170px; padding: 8px 10px; }
-  .opacity-row { font-size: 11px; }
-  .opacity-row label { width: 55px; }
-  #colorPalette { left: 8px; padding: 10px; }
-  .color-grid { grid-template-columns: repeat(4, 32px); gap: 4px; }
-  .color-swatch { width: 32px; height: 32px; }
-  #actionsPanel { bottom: 16px; right: 8px; gap: 8px; }
-  .action-btn { width: 40px; height: 40px; font-size: 18px; }
-}
-
-@media (max-width: 480px) {
-  #opacityControls { top: 90px; min-width: 150px; }
-  #brushHud { top: 8px; left: 8px; }
-  .hud-item { padding: 6px 10px; font-size: 12px; }
-  #colorPalette { left: 4px; padding: 8px; }
-  #statusBar { top: 8px; right: 8px; font-size: 10px; padding: 4px 8px; }
+@media(max-width:600px){
+  #hud{top:8px;left:8px}
+  #opacityPanel{top:100px;left:8px}
+  #statusBar{top:8px;right:8px}
+  #actions{bottom:12px;right:8px;gap:6px}
+  #actions button{width:38px;height:38px;font-size:16px}
 }

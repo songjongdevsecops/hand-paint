@@ -3,84 +3,51 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hand Paint — MediaPipe Holistic + WASM</title>
+  <title>Hand Paint</title>
   <link rel="stylesheet" href="css/style.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✋</text></svg>">
 </head>
 <body>
 
-  <!-- Hidden webcam — must be rendered (not display:none) for frame decoding -->
   <video id="webcam" autoplay playsinline muted></video>
+  <canvas id="canvas"></canvas>
 
-  <!-- Main canvas (full viewport) — composites camera → paint → skeleton -->
-  <canvas id="paintCanvas"></canvas>
-
-  <!-- Status bar (top-right) -->
-  <div id="statusBar">
-    <span id="pipStatus">Starting...</span>
+  <div id="hud">
+    <div id="brushPreview"><div id="brushDot"></div><span id="brushSize">8px</span></div>
+    <div id="gestureLabel">Loading...</div>
   </div>
 
-  <!-- Opacity controls (top-left, below HUD) -->
-  <div id="opacityControls" class="panel">
-    <div class="opacity-row">
-      <label>📷 Camera</label>
-      <input type="range" id="cameraOpacitySlider" min="0" max="1" step="0.05" value="0.05">
-      <span id="cameraOpacityVal">5%</span>
-    </div>
+  <div id="opacityPanel">
+    <label>📷 <span id="camOpacityVal">10%</span></label>
+    <input type="range" id="camOpacity" min="0" max="1" step="0.05" value="0.10">
   </div>
 
-  <!-- Color palette panel (hidden by default) -->
-  <div id="colorPalette" class="panel hidden">
-    <div class="panel-title">Colors</div>
-    <div class="color-grid" id="colorGrid"></div>
-    <div class="quick-colors" id="quickColors"></div>
+  <div id="statusBar"><span id="fps">--</span></div>
+
+  <div id="actions">
+    <button id="btnUndo" title="Undo (pinky)">↩</button>
+    <button id="btnClear" title="Clear (wave)">🗑</button>
+    <button id="btnSave" title="Save PNG">💾</button>
+    <button id="btnPalette" title="Colors (open hand)">🎨</button>
   </div>
 
-  <!-- Actions panel (bottom-right) -->
-  <div id="actionsPanel">
-    <button class="action-btn" id="btnUndo" title="Undo (pinky up)">↩</button>
-    <button class="action-btn" id="btnRedo" title="Redo">↪</button>
-    <button class="action-btn" id="btnClear" title="Clear canvas (fist 2s)">🗑</button>
-    <button class="action-btn" id="btnSave" title="Save as PNG">💾</button>
-    <button class="action-btn" id="btnPalette" title="Colors (open palm)">🎨</button>
+  <div id="palette" class="hidden">
+    <div id="colorGrid"></div>
   </div>
 
-  <!-- Brush HUD (top-left) -->
-  <div id="brushHud">
-    <div id="brushPreview" class="hud-item">
-      <div id="brushDot"></div>
-      <span id="brushSize">8px</span>
-    </div>
-    <div id="gestureIndicator" class="hud-item">
-      <span id="gestureLabel">Initializing...</span>
-    </div>
-  </div>
-
-  <!-- Loading overlay -->
-  <div id="loadingOverlay">
+  <div id="loading">
     <div class="spinner"></div>
-    <p id="loadingText">Loading MediaPipe Holistic...</p>
-    <p class="loading-sub">WASM + GPU acceleration</p>
-    <div id="loadingBar"><div id="loadingProgress"></div></div>
+    <p id="loadingText">Loading Hand Tracker...</p>
+    <div id="loadingBar"><div id="loadingFill"></div></div>
   </div>
 
-  <!-- Error overlay -->
-  <div id="errorOverlay" class="hidden">
-    <div class="error-box">
-      <h2>⚠️ Camera Required</h2>
-      <p id="errorMessage">Please allow camera access.</p>
-      <button id="retryBtn">Retry</button>
-    </div>
+  <div id="error" class="hidden">
+    <p id="errorMsg"></p>
+    <button id="btnRetry">Retry</button>
   </div>
 
   <script type="importmap">
-  {
-    "imports": {
-      "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs"
-    }
-  }
+  { "imports": { "vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs" } }
   </script>
-
   <script type="module" src="js/main.js"></script>
 </body>
 </html>
