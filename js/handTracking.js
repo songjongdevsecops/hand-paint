@@ -215,25 +215,57 @@ export class HandTracker {
     // Log _lastHands structure
     console.log('[SKELETON DEBUG] _lastHands length:', this._lastHands.length);
     
-    for (const h of this._lastHands) {
-      console.log('[SKELETON DEBUG] hand keys:', Object.keys(h), 'landmarks type:', typeof h.landmarks, 'isArray:', Array.isArray(h.landmarks), 'length:', h.landmarks?.length);
-      const lm = h.landmarks;
-      if (!lm || lm.length < 21) {
-        console.log('[SKELETON DEBUG] SKIPPED — lm invalid');
-        continue;
+    for (let hi = 0; hi < this._lastHands.length; hi++) {
+      try {
+        const h = this._lastHands[hi];
+        console.log('[SKELETON DEBUG] hand[' + hi + '] keys:', Object.keys(h), 'landmarks:', typeof h.landmarks, Array.isArray(h.landmarks), h.landmarks?.length);
+        
+        const lm = h.landmarks;
+        if (!lm || lm.length < 21) {
+          console.log('[SKELETON DEBUG] SKIPPED hand[' + hi + '] — invalid landmarks');
+          continue;
+        }
+        
+        // Try accessing first landmark
+        const first = lm[0];
+        console.log('[SKELETON DEBUG] lm[0]:', first, 'type:', typeof first, 'x:', first?.x, 'y:', first?.y);
+        
+        // Draw yellow at wrist
+        const x0 = this._mirrorX(first.x, w);
+        const y0 = first.y * h;
+        console.log('[SKELETON DEBUG] wrist screen pos:', x0, y0);
+        
+        ctx.fillStyle = '#ffff00';
+        ctx.beginPath();
+        ctx.arc(x0, y0, 40, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        console.log('[SKELETON DEBUG] wrist circle drawn at', x0, y0);
+        
+        // Draw all landmarks
+        for (let i = 0; i < lm.length; i++) {
+          const p = lm[i];
+          if (!p || typeof p.x !== 'number') continue;
+          const x = this._mirrorX(p.x, w);
+          const y = p.y * h;
+          ctx.fillStyle = i === 8 ? '#ff0000' : '#00ff00';
+          ctx.beginPath();
+          ctx.arc(x, y, 15, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+        console.log('[SKELETON DEBUG] all', lm.length, 'landmark circles drawn');
+      } catch(e) {
+        console.error('[SKELETON DEBUG] ERROR in hand[' + hi + ']:', e.message, e.stack);
+        // Draw error indicator
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(200, 10, 50, 50);
       }
-      console.log('[SKELETON DEBUG] lm[0]:', lm[0]);
-      
-      // Draw yellow at wrist
-      const x0 = this._mirrorX(lm[0].x, w);
-      const y0 = lm[0].y * h;
-      ctx.fillStyle = '#ffff00';
-      ctx.beginPath();
-      ctx.arc(x0, y0, 30, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Draw all landmarks
-      for (let i = 0; i < lm.length; i++) {
+    }
         const p = lm[i];
         if (!p || typeof p.x !== 'number') continue;
         const x = this._mirrorX(p.x, w);
