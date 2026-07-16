@@ -1,11 +1,12 @@
 /* ============================================================
-   gestures.js — Hand gesture recognition engine
+   gestures.js — Hand gesture recognition v2
    
-   Uses MediaPipe hand landmarks (21 points per hand)
-   to detect specific gestures for paint controls.
+   Uses 3D world landmarks (meters, rotation-invariant) for
+   finger extension detection via bone angles.
+   Falls back to 2D normalized landmarks if world coords unavailable.
    ============================================================ */
 
-// Landmark indices for a single hand
+// Landmark indices for a single hand (21 points)
 export const LM = {
   WRIST: 0,
   THUMB_CMC: 1, THUMB_MCP: 2, THUMB_IP: 3, THUMB_TIP: 4,
@@ -15,186 +16,158 @@ export const LM = {
   PINKY_MCP: 17, PINKY_PIP: 18, PINKY_DIP: 19, PINKY_TIP: 20
 };
 
-// Finger definitions for extension checking
-const FINGERS = [
-  { name: 'thumb',  tip: LM.THUMB_TIP,  pip: LM.THUMB_IP,  mcp: LM.THUMB_MCP },
-  { name: 'index',  tip: LM.INDEX_TIP,  pip: LM.INDEX_DIP,  mcp: LM.INDEX_MCP },
-  { name: 'middle', tip: LM.MIDDLE_TIP, pip: LM.MIDDLE_DIP, mcp: LM.MIDDLE_MCP },
-  { name: 'ring',   tip: LM.RING_TIP,   pip: LM.RING_DIP,   mcp: LM.RING_MCP },
-  { name: 'pinky',  tip: LM.PINKY_TIP,  pip: LM.PINKY_DIP,  mcp: LM.PINKY_MCP }
-];
+// Finger bone definitions: [base, middle, tip] landmark indices
+const FINGER_BONES = {
+  thumb:  [LM.THUMB_MCP, LM.THUMB_IP, LM.THUMB_TIP],
+  index:  [LM.INDEX_MCP, LM.INDEX_PIP, LM.INDEX_TIP],
+  middle: [LM.MIDDLE_MCP, LM.MIDDLE_PIP, LM.MIDDLE_TIP],
+  ring:   [LM.RING_MCP, LM.RING_PIP, LM.RING_TIP],
+  pinky:  [LM.PINKY_MCP, LM.PINKY_PIP, LM.PINKY_TIP]
+};
+
+/* ---- 3D Vector math ---- */
+
+function vec3(x, y, z) { return { x, y, z: z || 0 }; }
+
+function sub3(a, b) { return { x: a.x - b.x, y: a.y - b.y, z: (a.z||0) - (b.z||0) }; }
+
+function dot3(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+
+function len3(v) { return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
+
+function dist3(a, b) { return len3(sub3(a, b)); }
 
 /**
- * Euclidean distance between two landmarks (normalized 0..1 coords)
+ * Angle between two vectors in degrees.
  */
-export function distance(a, b) {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  const dz = (a.z || 0) - (b.z || 0);
-  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+function angleBetween(a, b) {
+  const dot = dot3(a, b);
+  const mags = len3(a) * len3(b);
+  if (mags < 1e-10) return 180; // degenerate → treat as straight
+  const cos = Math.max(-1, Math.min(1, dot / mags));
+  return Math.acos(cos) * (180 / Math.PI);
 }
 
+/* ---- Finger extension: angle-based (3D, rotation-invariant) ---- */
+
 /**
- * Check if a finger is extended.
- * Uses distance from wrist: if fingertip is farther from wrist than the PIP joint, it's extended.
- * This is rotation-invariant.
+ * Check if a finger is extended using the angle between its two bone segments.
+ * MCP→PIP and PIP→TIP. Straight finger ≈ 180°, bent finger < 140°.
+ * Uses 3D world coords if available, falls back to 2D normalized.
  */
-export function isFingerExtended(landmarks, finger) {
-  const wrist = landmarks[LM.WRIST];
-  const tip = landmarks[finger.tip];
-  const pip = landmarks[finger.pip];
-  const mcp = landmarks[finger.mcp];
+export function isFingerExtended(landmarks, worldLandmarks, fingerName) {
+  const [mcp, pip, tip] = FINGER_BONES[fingerName];
+  if (!landmarks[mcp] || !landmarks[pip] || !landmarks[tip]) return false;
 
-  const wristToTip = distance(wrist, tip);
-  const wristToPip = distance(wrist, pip);
-  const wristToMcp = distance(wrist, mcp);
-
-  // Special case for thumb: the thumb moves in a different plane than other fingers.
-  // Check if thumb tip is significantly farther from the wrist than the thumb IP joint.
-  // Also verify tip is not near the index finger (would indicate a relaxed or pinching thumb).
-  if (finger.name === 'thumb') {
-    // Thumb is extended if tip is substantially farther from wrist than IP joint
-    const tipFromWrist = distance(wrist, tip);
-    const ipFromWrist = distance(wrist, landmarks[finger.pip]);
-    // Also check: is thumb tip away from index MCP? (abducted, not adducted)
-    const indexMcp = landmarks[LM.INDEX_MCP];
-    const thumbTipToIndexMcp = distance(tip, indexMcp);
-    const thumbIpToIndexMcp = distance(landmarks[finger.pip], indexMcp);
-    
-    // Stricter: must be clearly abducted (away from palm) AND extended
-    const isAbducted = thumbTipToIndexMcp > thumbIpToIndexMcp * 1.2;
-    const isExtended = tipFromWrist > ipFromWrist * 1.15;
-    return isAbducted && isExtended;
+  let a, b, c;
+  if (worldLandmarks && worldLandmarks[mcp] && worldLandmarks[pip] && worldLandmarks[tip]) {
+    a = vec3(worldLandmarks[mcp].x, worldLandmarks[mcp].y, worldLandmarks[mcp].z);
+    b = vec3(worldLandmarks[pip].x, worldLandmarks[pip].y, worldLandmarks[pip].z);
+    c = vec3(worldLandmarks[tip].x, worldLandmarks[tip].y, worldLandmarks[tip].z);
+  } else {
+    // Fallback to 2D normalized coords
+    a = vec3(landmarks[mcp].x, landmarks[mcp].y, 0);
+    b = vec3(landmarks[pip].x, landmarks[pip].y, 0);
+    c = vec3(landmarks[tip].x, landmarks[tip].y, 0);
   }
 
-  // For other fingers: tip should be further from wrist than PIP, and PIP further than MCP
-  // Increased thresholds for more reliable detection
-  return wristToTip > wristToPip * 1.12 && wristToPip > wristToMcp * 1.03;
+  const ab = sub3(b, a); // MCP → PIP
+  const bc = sub3(c, b); // PIP → TIP
+  const angle = angleBetween(ab, bc);
+
+  // Thumb is naturally more bent even when "extended"
+  const threshold = fingerName === 'thumb' ? 130 : 155;
+  return angle > threshold;
 }
 
 /**
- * Get which fingers are extended on a hand
- * Returns array of finger names that are extended
+ * Get which fingers are extended.
  */
-export function getExtendedFingers(landmarks) {
+export function getExtendedFingers(landmarks, worldLandmarks) {
   if (!landmarks || landmarks.length < 21) return [];
-  return FINGERS
-    .filter(f => isFingerExtended(landmarks, f))
-    .map(f => f.name);
+  return Object.keys(FINGER_BONES).filter(name =>
+    isFingerExtended(landmarks, worldLandmarks, name)
+  );
 }
 
-/**
- * Compute the centroid (average position) of the hand
- */
-export function handCentroid(landmarks) {
-  if (!landmarks || landmarks.length === 0) return null;
-  let sx = 0, sy = 0, sz = 0;
-  const n = Math.min(landmarks.length, 21);
-  for (let i = 0; i < n; i++) {
-    sx += landmarks[i].x;
-    sy += landmarks[i].y;
-    sz += (landmarks[i].z || 0);
+/* ---- Pinch detection (3D distance) ---- */
+
+export function isPinching(landmarks, worldLandmarks, thresholdMeters = 0.04) {
+  if (worldLandmarks && worldLandmarks[LM.THUMB_TIP] && worldLandmarks[LM.INDEX_TIP]) {
+    return dist3(
+      vec3(worldLandmarks[LM.THUMB_TIP].x, worldLandmarks[LM.THUMB_TIP].y, worldLandmarks[LM.THUMB_TIP].z),
+      vec3(worldLandmarks[LM.INDEX_TIP].x, worldLandmarks[LM.INDEX_TIP].y, worldLandmarks[LM.INDEX_TIP].z)
+    ) < thresholdMeters;
   }
-  return { x: sx / n, y: sy / n, z: sz / n };
+  // 2D fallback
+  const dx = landmarks[LM.THUMB_TIP].x - landmarks[LM.INDEX_TIP].x;
+  const dy = landmarks[LM.THUMB_TIP].y - landmarks[LM.INDEX_TIP].y;
+  return Math.sqrt(dx * dx + dy * dy) < 0.06;
 }
 
-/**
- * Detect a pinch gesture (thumb tip close to index tip)
- */
-export function isPinching(landmarks, threshold = 0.05) {
-  return distance(landmarks[LM.THUMB_TIP], landmarks[LM.INDEX_TIP]) < threshold;
-}
+/* ---- Main classifier ---- */
 
 /**
- * Main gesture classifier.
- * Returns an object with detected gesture type and relevant data.
- * 
- * Gesture types:
- *   'paint'    — only index finger extended → draw
- *   'hover'    — index + middle extended → move cursor without drawing
- *   'menu'     — all 5 fingers spread → toggle menu
- *   'undo'     — only pinky extended
- *   'fist'     — no fingers extended → potentially clear
- *   'pinch'    — thumb + index close together → brush size
- *   'unknown'  — fallback
+ * Classify hand gesture from landmarks.
+ * @param {Array} landmarks - 21 normalized landmarks
+ * @param {Array} worldLandmarks - 21 world landmarks (3D, meters)
+ * @returns {{ type: string, data: object|null }}
  */
-export function classifyGesture(landmarks) {
+export function classifyGesture(landmarks, worldLandmarks) {
   if (!landmarks || landmarks.length < 21) {
     return { type: 'unknown', data: null };
   }
 
-  const extended = getExtendedFingers(landmarks);
+  const extended = getExtendedFingers(landmarks, worldLandmarks);
   const count = extended.length;
-
-  // Pinch detection (thumb and index close)
-  const pinch = isPinching(landmarks, 0.06);
-
-  // Index finger tip position (for drawing)
+  const pinch = isPinching(landmarks, worldLandmarks);
   const indexTip = landmarks[LM.INDEX_TIP];
-  const thumbTip = landmarks[LM.THUMB_TIP];
+  const wrist = landmarks[LM.WRIST];
 
-  // --- Gesture classification ---
+  // --- Classification ---
 
-  // Fist: no fingers extended
   if (count === 0) {
-    return { type: 'fist', data: { centroid: handCentroid(landmarks) } };
+    return { type: 'fist', data: null };
   }
 
-  // Only pinky extended → undo
   if (count === 1 && extended.includes('pinky')) {
     return { type: 'undo', data: null };
   }
 
-  // Only thumb extended → not assigned (use button to save)
+  // Thumb only → ignored (prevents accidental triggers)
   if (count === 1 && extended.includes('thumb')) {
     return { type: 'unknown', data: null };
   }
 
-  // Only index extended → paint
+  // Index only → paint
   if (count === 1 && extended.includes('index')) {
     return { type: 'paint', data: { position: indexTip } };
   }
 
-  // Index + middle extended → hover (cursor mode, no paint)
+  // Index + middle → hover
   if (count === 2 && extended.includes('index') && extended.includes('middle')) {
     return { type: 'hover', data: { position: indexTip } };
   }
 
-  // Pinch gesture → brush size via vertical movement
-  // Use wrist position as reference (stable) rather than index tip (moves during pinch)
-  if (pinch && (extended.includes('thumb') || extended.includes('index'))) {
-    return { type: 'pinch', data: { position: landmarks[LM.WRIST] } };
+  // Pinch → brush size via vertical movement
+  if (pinch) {
+    return { type: 'pinch', data: { position: wrist } };
   }
 
-  // All 5 fingers spread → menu toggle
+  // 5 fingers → menu
   if (count >= 5) {
-    return { type: 'menu', data: { centroid: handCentroid(landmarks) } };
+    return { type: 'menu', data: null };
   }
 
-  // Index + middle + ring → menu
-  if (count === 3 && extended.includes('index') && extended.includes('middle') && extended.includes('ring')) {
-    return { type: 'menu', data: { centroid: handCentroid(landmarks) } };
-  }
-
-  // Default: unknown
   return { type: 'unknown', data: { position: indexTip } };
 }
 
-/**
- * Map normalized landmark coordinates (0..1) to canvas pixel coordinates
- */
+/* ---- Coordinate mapping ---- */
+
 export function mapToCanvas(landmark, canvasWidth, canvasHeight, mirror = true) {
   return {
     x: mirror ? (1 - landmark.x) * canvasWidth : landmark.x * canvasWidth,
     y: landmark.y * canvasHeight,
     z: landmark.z || 0
   };
-}
-
-/**
- * Convert MediaPipe hand landmarks to array of {x,y,z} for drawing
- */
-export function landmarksToPoints(landmarks, canvasWidth, canvasHeight) {
-  if (!landmarks) return [];
-  return landmarks.map(l => mapToCanvas(l, canvasWidth, canvasHeight));
 }

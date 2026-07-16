@@ -227,7 +227,8 @@ class HandPaintApp {
     this.handLostFrames = 0;
 
     const landmarks = paintHand.landmarks;
-    const rawGesture = classifyGesture(landmarks);
+    const worldLandmarks = paintHand.worldLandmarks;
+    const rawGesture = classifyGesture(landmarks, worldLandmarks);
     const stableType = this.stabilizer.update(rawGesture.type);
     const stableGesture = { ...rawGesture, type: stableType };
 

@@ -265,7 +265,6 @@ export class HandTracker {
   /* ---- Landmark accessors ---- */
 
   getHands() {
-    // Prefer smoothed, fallback raw
     const src = (this._smoothedLandmarks && this._smoothedLandmarks.length > 0)
       ? this._smoothedLandmarks
       : this.lastResults?.landmarks;
@@ -274,18 +273,22 @@ export class HandTracker {
 
     const hands = [];
     const handednessList = this.lastResults?.handedness || [];
+    const worldLms = this.lastResults?.worldLandmarks || [];
 
     for (let i = 0; i < src.length; i++) {
       const lm = src[i];
       if (!lm || lm.length < 21) continue;
 
-      // Get handedness from classification
       let handedness = 'Right';
       if (handednessList[i] && handednessList[i].length > 0) {
-        handedness = handednessList[i][0].categoryName; // "Left" or "Right"
+        handedness = handednessList[i][0].categoryName;
       }
 
-      hands.push({ handedness, landmarks: lm });
+      hands.push({
+        handedness,
+        landmarks: lm,
+        worldLandmarks: worldLms[i] || null  // 3D world coords for gesture detection
+      });
     }
 
     return hands;
