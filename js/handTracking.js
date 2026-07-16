@@ -1,37 +1,42 @@
-// handTracking.js — MediaPipe HandLandmarker (hands-only, v3)
+// handTracking.js — MediaPipe GestureRecognizer (pre-trained gestures!)
 
-import { HandLandmarker, FilesetResolver } from 'vision';
+import { GestureRecognizer, FilesetResolver } from 'vision';
 
 const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm';
-const MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task';
+const MODEL = 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/latest/gesture_recognizer.task';
 
 const OPTS = {
   baseOptions: { modelAssetPath: MODEL, delegate: 'GPU' },
   runningMode: 'VIDEO',
   numHands: 1,
   minHandDetectionConfidence: 0.3,
-  minHandTrackingConfidence: 0.2,
+  minTrackingConfidence: 0.2,
   minHandPresenceConfidence: 0.3,
+};
+
+// Pre-trained gesture → our internal type
+const GESTURE_MAP = {
+  'Closed_Fist': 'fist',
+  'Open_Palm': 'menu',
+  'Pointing_Up': 'paint',
+  'Victory': 'hover',
+  'Thumb_Up': 'none',  // not used
+  'Thumb_Down': 'none',
+  'ILoveYou': 'none',
+  'None': 'none',
 };
 
 export class HandTracker {
   constructor() {
-    this.landmarker = null;
+    this.recognizer = null;
     this.video = null;
     this.stream = null;
     this.running = false;
     this.results = null;
     this.onResults = null;
-    this.fps = 0;
-    this._fc = 0;
-    this._t0 = 0;
-    this._dt = 0;
-    // EMA smoothing
-    this._smooth = null;
-    this._sf = 0.20;
-    // Skeleton persistence
-    this._last = null;
-    this._persist = 0;
+    this.fps = 0; this._fc = 0; this._t0 = 0; this._dt = 0;
+    this._smooth = null; this._sf = 0.20;
+    this._last = null; this._persist = 0;
   }
 
   async init(video, onProgress) {
@@ -42,8 +47,8 @@ export class HandTracker {
     p(20, 'WASM...');
     const fs = await FilesetResolver.forVisionTasks(WASM);
     p(50, 'Model...');
-    try { this.landmarker = await HandLandmarker.createFromOptions(fs, OPTS); }
-    catch (e) { console.warn('GPU fail, CPU'); OPTS.baseOptions.delegate = 'CPU'; this.landmarker = await HandLandmarker.createFromOptions(fs, OPTS); }
+    try { this.recognizer = await GestureRecognizer.createFromOptions(fs, OPTS); }
+    catch (e) { console.warn('GPU fail, CPU'); OPTS.baseOptions.delegate = 'CPU'; this.recognizer = await GestureRecognizer.createFromOptions(fs, OPTS); }
     p(80, 'Ready');
     this.running = true;
     this._loop();
@@ -71,7 +76,7 @@ export class HandTracker {
       const t0 = performance.now();
       try {
         if (this.video.readyState >= 2 && this.video.videoWidth > 0 && !this.video.paused) {
-          const r = this.landmarker.detectForVideo(this.video, performance.now());
+          const r = this.recognizer.recognizeForVideo(this.video, performance.now());
           this.results = r;
           this._dt = performance.now() - t0;
           this._smoothFn(r);
@@ -101,6 +106,7 @@ export class HandTracker {
     this._smooth.length = raw.length;
   }
 
+  /** Returns { handedness, landmarks, worldLandmarks, gesture } or null */
   getHand() {
     const src = this._smooth || this.results?.landmarks;
     if (!src || src.length === 0) return null;
@@ -108,7 +114,15 @@ export class HandTracker {
     if (!lm || lm.length < 21) return null;
     const hd = this.results?.handedness;
     const hand = hd && hd[0] && hd[0][0] ? hd[0][0].categoryName : 'Right';
-    return { handedness: hand, landmarks: lm, worldLandmarks: (this.results?.worldLandmarks || [])[0] || null };
+    // Get pre-trained gesture
+    const gestures = this.results?.gestures;
+    const rawGesture = (gestures && gestures[0] && gestures[0][0]) ? gestures[0][0].categoryName : 'None';
+    return {
+      handedness: hand,
+      landmarks: lm,
+      worldLandmarks: (this.results?.worldLandmarks || [])[0] || null,
+      gesture: GESTURE_MAP[rawGesture] || 'none'
+    };
   }
 
   drawCamera(ctx, w, h) {
@@ -126,28 +140,23 @@ export class HandTracker {
     const lm = this._last.landmarks;
     if (!lm || lm.length < 21) return;
     const c = this._last.handedness === 'Right' ? '#ff1493' : '#00ffff';
-    // Proportional scale
     const hs = Math.hypot(((1 - lm[12].x) * w) - ((1 - lm[0].x) * w), (lm[12].y * h) - (lm[0].y * h));
     const s = Math.max(0.4, Math.min(2, hs / 120));
     const conns = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],[0,17],[17,18],[18,19],[19,20],[5,9],[9,13],[13,17]];
     const mx = (x) => (1 - x) * w;
-    // Glow
     ctx.strokeStyle = c + '55'; ctx.lineWidth = Math.round(14 * s); ctx.lineCap = 'round';
     for (const [i, j] of conns) { if (!lm[i] || !lm[j]) continue; ctx.beginPath(); ctx.moveTo(mx(lm[i].x), lm[i].y * h); ctx.lineTo(mx(lm[j].x), lm[j].y * h); ctx.stroke(); }
-    // Solid
     ctx.strokeStyle = c + 'cc'; ctx.lineWidth = Math.round(6 * s);
     for (const [i, j] of conns) { if (!lm[i] || !lm[j]) continue; ctx.beginPath(); ctx.moveTo(mx(lm[i].x), lm[i].y * h); ctx.lineTo(mx(lm[j].x), lm[j].y * h); ctx.stroke(); }
-    // Joints
     const r = Math.round(8 * s);
     for (const p of lm) { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(mx(p.x), p.y * h, r, 0, Math.PI * 2); ctx.fill(); }
-    // Tips
     const tr = Math.round(9 * s);
     for (const i of [4, 8, 12, 16, 20]) { const t = lm[i]; if (!t) continue; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(mx(t.x), t.y * h, tr, 0, Math.PI * 2); ctx.fill(); }
   }
 
   dispose() {
     this.running = false;
-    if (this.landmarker) { this.landmarker.close(); this.landmarker = null; }
+    if (this.recognizer) { this.recognizer.close(); this.recognizer = null; }
     if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
   }
 }

@@ -1,55 +1,37 @@
-// main.js — Orchestrator
+// main.js — Uses pre-trained gestures from GestureRecognizer
 
 import { HandTracker } from './handTracking.js';
 import { PaintEngine } from './canvas.js';
-import { classify as cl, toCanvas } from './gestures.js';
+import { toCanvas } from './gestures.js';
 
 const $ = id => document.getElementById(id);
 
-// ---- Stabilizer with hysteresis ----
 class Stabilizer {
-  constructor() {
-    this.s = 'none';
-    this.exit = 0;
-    this.entry = null; this.ec = 0;
-  }
+  constructor() { this.s = 'none'; this.exit = 0; this.entry = null; this.ec = 0; }
   update(raw) {
     if (raw === this.s) { this.exit = 0; this.entry = null; this.ec = 0; return this.s; }
     this.exit++;
-    const cont = ['paint', 'hover', 'pinch'].includes(this.s);
-    if (cont && this.exit < 8) return this.s;
-    if (this.s === 'paint' && raw === 'none' && this.exit < 14) return this.s;
-    const disc = ['fist', 'menu'].includes(raw);
-    if (disc) {
+    if (['paint','hover','pinch'].includes(this.s) && this.exit < 10) return this.s;
+    if (this.s === 'paint' && raw === 'none' && this.exit < 16) return this.s;
+    if (['fist','menu'].includes(raw)) {
       if (this.entry !== raw) { this.entry = raw; this.ec = 1; }
       else this.ec++;
-      if (this.ec < (raw === 'menu' ? 5 : 8)) return this.s;  // menu 5 frames, fist 8 frames
+      if (this.ec < (raw === 'fist' ? 12 : 8)) return this.s;
     }
-    this.s = raw; this.exit = 0; this.entry = null; this.ec = 0;
-    return this.s;
+    this.s = raw; this.exit = 0; this.entry = null; this.ec = 0; return this.s;
   }
   reset() { this.s = 'none'; this.exit = 0; this.entry = null; this.ec = 0; }
 }
 
-// ---- App ----
 class App {
   constructor() {
     this.tracker = new HandTracker();
     this.engine = null;
     this.stab = new Stabilizer();
-    this.gesture = 'none';
-    this.drawing = false;
-    this.lost = 0;
-    this.lastPos = null;
-    // Pinch brush
-    this.pinchOn = false;
-    this.pinchY0 = 0;
-    this.pinchBase = 8;
-    // Wave detection
-    this.waveX = [];
-    this.waveLast = 0;
-    // Debounce
+    this.drawing = false; this.lost = 0; this.lastPos = null;
+    this.pinchOn = false; this.pinchY0 = 0; this.pinchBase = 8;
     this.fistClear = 0;
+    this.waveX = []; this.waveLast = 0;
   }
 
   async start() {
@@ -57,9 +39,8 @@ class App {
     this.engine.camFn = (ctx, w, h) => this.tracker.drawCamera(ctx, w, h);
     this.engine.skelFn = (ctx, w, h) => this.tracker.drawSkeleton(ctx, w, h);
     this._ui();
-    const video = $('webcam');
     try {
-      await this.tracker.init(video, (n, t) => { $('loadingFill').style.width = n + '%'; $('loadingText').textContent = t; });
+      await this.tracker.init($('webcam'), (n, t) => { $('loadingFill').style.width = n + '%'; $('loadingText').textContent = t; });
       this.tracker.onResults = (r, ts) => this._onFrame(r, ts);
       $('loading').classList.add('hidden');
       this._render();
@@ -98,31 +79,34 @@ class App {
     const hand = this.tracker.getHand();
     if (!hand) {
       this.lost++;
-      if (this.lost <= 25) {
-        if (this.drawing && this.lastPos) this.engine.move(this.lastPos);
-        $('gestureLabel').textContent = 'Lost ' + (25 - this.lost + 1);
-        return;
-      }
+      if (this.lost <= 25) { if (this.drawing && this.lastPos) this.engine.move(this.lastPos); $('gestureLabel').textContent = 'Lost ' + (25 - this.lost + 1); return; }
       $('gestureLabel').textContent = 'Searching...';
       if (this.drawing) { this.engine.end(); this.drawing = false; }
-      this.stab.reset();
-      this.pinchOn = false;
+      this.stab.reset(); this.pinchOn = false;
       return;
     }
     this.lost = 0;
-    const g = cl(hand.landmarks, hand.worldLandmarks);
-    const st = this.stab.update(g.type);
-    this._act({ ...g, type: st }, ts);
-    this.gesture = st;
+
+    // Use pre-trained gesture from the model!
+    const rawType = hand.gesture;
+
+    // Custom pinch detection (not in pre-trained set)
+    const indexTip = hand.landmarks[8], thumbTip = hand.landmarks[4];
+    const dx = indexTip.x - thumbTip.x, dy = indexTip.y - thumbTip.y;
+    const pinching = Math.sqrt(dx * dx + dy * dy) < 0.05;
+    const gestureType = pinching ? 'pinch' : rawType;
+
+    const st = this.stab.update(gestureType);
+    this._act(st, hand, ts);
   }
 
-  _act(g, ts) {
-    const { type, pos } = g;
+  _act(type, hand, ts) {
     $('gestureLabel').style.color = '#ff1493';
+    const idx = hand.landmarks[8], wrist = hand.landmarks[0];
 
     switch (type) {
       case 'paint':
-        this._paint(pos);
+        this._paint(idx);
         $('gestureLabel').textContent = '🎨 Paint';
         break;
       case 'hover':
@@ -130,7 +114,7 @@ class App {
         $('gestureLabel').textContent = '👆 Hover'; $('gestureLabel').style.color = '#0bf';
         break;
       case 'pinch':
-        this._pinch(pos);
+        this._pinch(wrist);
         $('gestureLabel').textContent = '🤏 ' + Math.round(this.engine.brush.size) + 'px';
         break;
       case 'fist':
@@ -148,18 +132,15 @@ class App {
         if (this.drawing) { this.engine.end(); this.drawing = false; }
         $('gestureLabel').textContent = '···'; $('gestureLabel').style.color = '#888';
     }
-    // Wave = cycle color
-    const h = this.tracker.getHand();
-    if (h) this._wave(h.landmarks[0]);
-    // Reset pinch
+    // Wave for color cycling
+    if (hand) this._wave(wrist);
     if (type !== 'pinch') this.pinchOn = false;
   }
 
   _paint(pos) {
     if (!pos) return;
     const p = toCanvas(pos, this.engine.c.clientWidth, this.engine.c.clientHeight);
-    this.lastPos = p;
-    this.pinchOn = false;
+    this.lastPos = p; this.pinchOn = false;
     if (!this.drawing) { this.engine.start(p); this.drawing = true; }
     else this.engine.move(p);
   }
@@ -169,7 +150,7 @@ class App {
     if (!pos) return;
     const y = pos.y;
     if (!this.pinchOn) { this.pinchOn = true; this.pinchY0 = y; this.pinchBase = this.engine.brush.size; }
-    else { const ns = this.pinchBase + (this.pinchY0 - y) * 60; this.engine.setSize(ns); }
+    else { this.engine.setSize(this.pinchBase + (this.pinchY0 - y) * 60); }
   }
 
   _wave(wrist) {
@@ -184,16 +165,13 @@ class App {
       if (dir && dir !== prev && prev) cross++;
       if (dir) prev = dir;
     }
+    if (cross >= 1) $('gestureLabel').textContent = '👋 Wave ' + cross + '/3';
     const amp = Math.max(...this.waveX) - Math.min(...this.waveX);
-    // Show wave progress
-    if (cross >= 1) $('gestureLabel').textContent = '👋 Wave ' + cross + '/3'; 
-    const now = performance.now();
-    if (cross >= 3 && amp > 0.04 && now - this.waveLast > 1500) {
-      this.waveLast = now; this.waveX = [];
+    if (cross >= 3 && amp > 0.04 && performance.now() - this.waveLast > 1500) {
+      this.waveLast = performance.now(); this.waveX = [];
       const colors = ['#ff1493','#f00','#f80','#fd0','#0f0','#0ff','#08f','#00f','#80f','#fff','#000'];
       const cur = this.engine.brush.color;
-      const idx = colors.indexOf(cur);
-      const next = colors[(idx + 1) % colors.length];
+      const next = colors[(colors.indexOf(cur) + 1) % colors.length];
       this.engine.setColor(next);
       $('gestureLabel').textContent = '👋 ' + next; $('gestureLabel').style.color = next;
       setTimeout(() => { $('gestureLabel').textContent = 'Ready'; $('gestureLabel').style.color = '#ff1493'; }, 1000);
