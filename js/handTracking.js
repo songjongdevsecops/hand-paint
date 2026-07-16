@@ -45,6 +45,7 @@ export class HandTracker {
     this._lastHands = [];
     this._skeletonFramesLeft = 0;
     this._SKELETON_PERSIST = 15; // frames to persist after detection loss
+    this._didLogSkeleton = false;
   }
 
   async initialize(videoElement, onProgress) {
@@ -185,14 +186,23 @@ export class HandTracker {
     if (hands.length > 0) {
       this._lastHands = hands;
       this._skeletonFramesLeft = this._SKELETON_PERSIST;
+      if (!this._didLogSkeleton) {
+        console.log('[HandTracker] Skeleton active —', hands.length, 'hand(s), persistence:', this._skeletonFramesLeft, 'frames');
+        this._didLogSkeleton = true;
+      }
     } else if (this._skeletonFramesLeft > 0) {
       this._skeletonFramesLeft--;
     } else {
+      if (this._didLogSkeleton) {
+        console.log('[HandTracker] Skeleton gone — no hands, persistence expired');
+        this._didLogSkeleton = false;
+      }
       return; // Nothing to draw
     }
 
     for (const h of this._lastHands) {
       const lm = h.landmarks;
+      if (!lm || lm.length < 21) continue;
       const isRight = h.handedness === 'right';
 
       // Intense colors — right hand hot pink, left hand bright cyan

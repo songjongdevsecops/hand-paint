@@ -123,6 +123,8 @@ export class PaintEngine {
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
 
+    if (w <= 0 || h <= 0) return;
+
     // Clear main canvas
     ctx.clearRect(0, 0, w, h);
 
@@ -134,8 +136,10 @@ export class PaintEngine {
     }
     ctx.restore();
 
-    // Layer 2: Paint strokes (always full opacity — paint opacity is baked in)
-    ctx.drawImage(this.paintLayer, 0, 0, w, h);
+    // Layer 2: Paint strokes — only if paintLayer has valid dimensions
+    if (this.paintLayer.width > 0 && this.paintLayer.height > 0) {
+      ctx.drawImage(this.paintLayer, 0, 0, w, h);
+    }
 
     // Layer 3: Hand skeleton overlay (always full opacity)
     if (this.skeletonRenderer) {
