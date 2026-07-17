@@ -284,4 +284,15 @@ class App {
   }
 }
 
-new App().start();
+const app = new App();
+app.start();
+
+window.__handPaint = {
+  app,
+  injectFrame(cursorPx, pinchDist) {
+    const fsmResult = app.fsm.update(pinchDist, performance.now());
+    const el = document.elementFromPoint(cursorPx.x, cursorPx.y);
+    const target = el?.closest('[data-hand]') || null;
+    app._handleUI(cursorPx, target, fsmResult, performance.now());
+  }
+};
