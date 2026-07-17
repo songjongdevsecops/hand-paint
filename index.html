@@ -1,58 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hand Paint</title>
-  <link rel="stylesheet" href="css/style.css">
-</head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Hand Paint</title><link rel="stylesheet" href="css/style.css"></head>
 <body>
-
-  <video id="webcam" autoplay playsinline muted></video>
-  <canvas id="canvas"></canvas>
-  <div id="handCursor" class="hidden" aria-hidden="true"></div>
-
-  <div id="hud">
-    <div id="brushPreview"><div id="brushDot"></div><span id="brushSize">8px</span></div>
-    <div id="gestureLabel">Loading...</div>
-  </div>
-
-  <div id="opacityPanel">
-    <label>📷 <span id="camOpacityVal">10%</span></label>
-    <input type="range" id="camOpacity" min="0" max="1" step="0.05" value="0.10">
-  </div>
-
-  <div id="statusBar"><span id="fps">--</span></div>
-
-  <div id="actions">
-    <button id="btnSizeUp"   data-hand title="Brush +">➕</button>
-    <button id="btnSizeDown" data-hand title="Brush −">➖</button>
-    <button id="btnClear" data-hand title="Clear">🗑</button>
-    <button id="btnSave" data-hand title="Save PNG">💾</button>
-  </div>
-
-  <div id="palette">
-    <div id="colorGrid"></div>
-  </div>
-
-  <div id="legend">
-    <span>☝️Paint</span> <span>🖐Clear</span> <span>✌️Next</span> <span>🤟Prev</span> <span>👎Undo</span> <span>👍Redo</span> <span>🤏Click UI</span><span>➕➖Brush</span>
-  </div>
-
-  <div id="loading">
-    <div class="spinner"></div>
-    <p id="loadingText">Loading Hand Tracker...</p>
-    <div id="loadingBar"><div id="loadingFill"></div></div>
-  </div>
-
-  <div id="error" class="hidden">
-    <p id="errorMsg"></p>
-    <button id="btnRetry">Retry</button>
-  </div>
-
-  <script type="importmap">
-  { "imports": { "vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs" } }
-  </script>
-  <script type="module" src="js/main.js"></script>
-</body>
-</html>
+<video id="webcam" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
+<div id="toolbar">
+  <button class="tool-btn" data-tool="brush" data-hand title="Brush">🖌️</button>
+  <button class="tool-btn" data-tool="eraser" data-hand title="Eraser">🧹</button>
+  <button class="tool-btn" data-tool="fill" data-hand title="Fill">🪣</button>
+  <span class="sep"></span>
+  <button id="btnUndo" data-hand title="Undo">↩</button>
+  <button id="btnClear" data-hand title="Clear">🗑</button>
+  <button id="btnSave" data-hand title="Save">💾</button>
+</div>
+<div id="sizeBar">
+  <button id="btnSizeDown" data-hand title="Smaller">➖</button>
+  <span id="brushSize">8px</span>
+  <button id="btnSizeUp" data-hand title="Bigger">➕</button>
+</div>
+<div id="palette"><div id="colorGrid"></div></div>
+<div id="hud"><span id="gestureLabel">Loading...</span><span id="fps">--</span></div>
+<div id="camPanel"><label>📷 <span id="camOpacityVal">10%</span></label><input type="range" id="camOpacity" min="0" max="1" step="0.05" value="0.10"></div>
+<div id="loading"><div class="spinner"></div><p id="loadingText">Loading...</p><div id="loadingBar"><div id="loadingFill"></div></div></div>
+<div id="error" class="hidden"><p id="errorMsg"></p><button id="btnRetry">Retry</button></div>
+<script type="importmap">{"imports":{"vision":"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs"}}</script>
+<script type="module" src="js/main.js"></script>
+</body></html>

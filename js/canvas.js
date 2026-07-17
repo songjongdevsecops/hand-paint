@@ -1,4 +1,4 @@
-// canvas.js — 3-layer compositing engine
+// canvas.js — 3-layer compositing + draw/erase modes
 
 export class PaintEngine {
   constructor(canvas) {
@@ -6,22 +6,15 @@ export class PaintEngine {
     this.ctx = canvas.getContext('2d', { desynchronized: true });
     this.paint = document.createElement('canvas');
     this.pctx = this.paint.getContext('2d', { alpha: true });
-    this.brush = { color: '#ff1493', size: 8 };
+    this.brush = { color: '#ff1493', size: 8, mode: 'draw' };
     this.drawing = false;
-    this.history = [];
-    this.hidx = -1;
+    this.history = []; this.hidx = -1;
     this.camAlpha = 0.10;
-    this.camFn = null;
-    this.skelFn = null;
-    this._resize();
-    this._save();
-    this._bindResize();
+    this.camFn = null; this.skelFn = null;
+    this._resize(); this._save(); this._bindResize();
   }
 
-  _bindResize() {
-    let t;
-    new ResizeObserver(() => { clearTimeout(t); t = setTimeout(() => this._resize(), 150); }).observe(this.c);
-  }
+  _bindResize() { let t; new ResizeObserver(() => { clearTimeout(t); t = setTimeout(() => this._resize(), 150); }).observe(this.c); }
 
   _resize() {
     const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -46,22 +39,18 @@ export class PaintEngine {
 
   undo() { if (this.hidx <= 0) return false; this.hidx--; const s = this.history[this.hidx]; this.pctx.putImageData(s.d, 0, 0); this.brush = { ...s.b }; return true; }
   redo() { if (this.hidx >= this.history.length - 1) return false; this.hidx++; const s = this.history[this.hidx]; this.pctx.putImageData(s.d, 0, 0); this.brush = { ...s.b }; return true; }
-
   clear() { this._save(); this.pctx.clearRect(0, 0, this.paint.width, this.paint.height); }
-
-  setColor(c) { this.brush.color = c; document.getElementById('brushDot').style.background = c; }
+  setColor(c) { this.brush.color = c; }
   setSize(s) { this.brush.size = Math.max(2, Math.min(60, s)); document.getElementById('brushSize').textContent = Math.round(s) + 'px'; }
   getSize() { return this.brush.size; }
+  setMode(m) { this.brush.mode = m; }
 
   frame() {
     const ctx = this.ctx, w = this.c.clientWidth, h = this.c.clientHeight;
     if (w <= 0 || h <= 0) return;
     ctx.clearRect(0, 0, w, h);
-    // Camera
     ctx.save(); ctx.globalAlpha = this.camAlpha; if (this.camFn) this.camFn(ctx, w, h); ctx.restore();
-    // Paint
     if (this.paint.width > 0) ctx.drawImage(this.paint, 0, 0, w, h);
-    // Skeleton
     if (this.skelFn) this.skelFn(ctx, w, h);
   }
 
@@ -71,12 +60,16 @@ export class PaintEngine {
 
   _dot(p) {
     const ctx = this.pctx, r = this.brush.size / 2;
-    const g = ctx.createRadialGradient(p.x, p.y, r * 0.2, p.x, p.y, r);
-    // Parse hex to RGB for reliable rgba() — avoids #fff00 invalid color bug
-    const hex = this.brush.color.replace('#', '');
+    if (this.brush.mode === 'erase') {
+      ctx.save(); ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.restore(); return;
+    }
+    const hex = (this.brush.color || '#ff1493').replace('#', '');
     const rgb = hex.length === 3
       ? [parseInt(hex[0]+hex[0], 16), parseInt(hex[1]+hex[1], 16), parseInt(hex[2]+hex[2], 16)]
       : [parseInt(hex.substring(0,2), 16), parseInt(hex.substring(2,4), 16), parseInt(hex.substring(4,6), 16)];
+    const g = ctx.createRadialGradient(p.x, p.y, r * 0.2, p.x, p.y, r);
     g.addColorStop(0, `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`);
     g.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
