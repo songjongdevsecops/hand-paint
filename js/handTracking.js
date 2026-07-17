@@ -121,7 +121,9 @@ export class HandTracker {
       handedness: hand,
       landmarks: lm,
       worldLandmarks: (this.results?.worldLandmarks || [])[0] || null,
-      gesture: GESTURE_MAP[rawGesture] || 'none'
+      gesture: GESTURE_MAP[rawGesture] || 'none',
+      pinchDist: Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y),
+      cursor: { x: (lm[4].x + lm[8].x) / 2, y: (lm[4].y + lm[8].y) / 2 }
     };
   }
 

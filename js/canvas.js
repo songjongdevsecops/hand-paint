@@ -51,6 +51,7 @@ export class PaintEngine {
 
   setColor(c) { this.brush.color = c; document.getElementById('brushDot').style.background = c; }
   setSize(s) { this.brush.size = Math.max(2, Math.min(60, s)); document.getElementById('brushSize').textContent = Math.round(s) + 'px'; }
+  getSize() { return this.brush.size; }
 
   frame() {
     const ctx = this.ctx, w = this.c.clientWidth, h = this.c.clientHeight;
