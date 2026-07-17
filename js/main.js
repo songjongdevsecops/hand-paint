@@ -1,20 +1,18 @@
-// main.js v5.1 — One hand points, other hand clicks (pinch)
+// main.js v5.2 — Dynamic roles: pincher=clicker, other=pointer
 
 import { HandTracker } from './handTracking.js';
 import { PaintEngine } from './canvas.js';
 import { toCanvas } from './gestures.js';
-import { PinchClickFSM, withinSlop, SLOP_PX, PINCH_CLOSE } from './interaction.js';
+import { PinchClickFSM, PINCH_CLOSE } from './interaction.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#ff1493','#fff','#f00','#f80','#fd0','#0f0','#0ff','#08f','#00f','#80f','#f0f','#808080','#000'];
 let colorIdx = 0, activeTool = 'brush';
 
-// Detect if index finger is extended (simple Y-distance check)
 function isPointing(lm) {
   if (!lm || lm.length < 21) return false;
-  const wrist = lm[0], tip = lm[8], pip = lm[6];
-  const wt = Math.hypot(wrist.x - tip.x, wrist.y - tip.y);
-  const wp = Math.hypot(wrist.x - pip.x, wrist.y - pip.y);
+  const wt = Math.hypot(lm[0].x - lm[8].x, lm[0].y - lm[8].y);
+  const wp = Math.hypot(lm[0].x - lm[6].x, lm[0].y - lm[6].y);
   return wt > wp * 1.05;
 }
 
@@ -23,9 +21,9 @@ class App {
     this.tracker = new HandTracker();
     this.engine = null;
     this.fsm = new PinchClickFSM();
-    this.pointerPx = null;    // Screen position of pointer hand's index
-    this.pointerData = null;  // Pointer hand data (for skeleton)
-    this.clickerData = null;  // Clicker hand data (for skeleton)
+    this.pointerPx = null;
+    this.pointerHand = null;  // hand data for pointer
+    this.clickerHand = null;  // hand data for clicker
     this.drawing = false;
     this.pressTarget = null;
     this.lost = 0;
@@ -36,7 +34,7 @@ class App {
     this.engine = new PaintEngine($('canvas'));
     this.engine.camFn = (ctx, w, h) => this.tracker.drawCamera(ctx, w, h);
     this.engine.skelFn = (ctx, w, h) => {
-      const hands = [this.pointerData, this.clickerData].filter(Boolean);
+      const hands = [this.pointerHand, this.clickerHand].filter(Boolean);
       this.tracker.drawSkeletons(ctx, w, h, hands);
     };
     this._ui();
@@ -76,12 +74,16 @@ class App {
   _render() {
     this.engine.frame();
     $('fps').textContent = this.tracker.fps + ' fps';
-    // Draw pointer cursor
+    // Draw mouse cursor at pointer position
     if (this.pointerPx) {
-      const ctx = this.engine.ctx;
-      const r = this.pinchNow ? 12 : 8;
-      ctx.fillStyle = '#ff1493'; ctx.beginPath(); ctx.arc(this.pointerPx.x, this.pointerPx.y, r, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(this.pointerPx.x, this.pointerPx.y, r + 2, 0, Math.PI * 2); ctx.stroke();
+      const ctx = this.engine.ctx, x = this.pointerPx.x, y = this.pointerPx.y;
+      // Cursor shadow
+      ctx.fillStyle = '#00000080';
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 16, y + 12); ctx.lineTo(x + 10, y + 16); ctx.lineTo(x + 12, y + 22); ctx.lineTo(x + 4, y + 20); ctx.lineTo(x, y + 28); ctx.closePath(); ctx.fill();
+      // Cursor body (arrow)
+      ctx.fillStyle = this.pinchNow ? '#ff1493' : '#fff';
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 14, y + 10); ctx.lineTo(x + 9, y + 14); ctx.lineTo(x + 10, y + 19); ctx.lineTo(x + 3, y + 17); ctx.lineTo(x, y + 24); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
     }
     requestAnimationFrame(() => this._render());
   }
@@ -92,80 +94,81 @@ class App {
       this.lost++;
       if (this.lost > 25) {
         if (this.drawing) { this.engine.end(); this.drawing = false; }
-        this.fsm.reset(); this.pointerPx = null; this.pointerData = null; this.clickerData = null; this.pressTarget = null;
+        this.fsm.reset(); this.pointerPx = null; this.pointerHand = null; this.clickerHand = null; this.pressTarget = null;
       }
       $('gestureLabel').textContent = this.lost > 25 ? 'Searching...' : 'Lost ' + (25 - this.lost + 1);
       return;
     }
     this.lost = 0;
 
-    // Assign roles: pointer hand (index extended) vs clicker hand (pinching)
-    this.pointerData = null; this.clickerData = null;
-    let pointerIdx = -1, clickerIdx = -1;
+    // Dynamic role assignment: pincher = clicker, other = pointer
+    const pinchingIdx = hands.findIndex(h => h.pinchDist < PINCH_CLOSE);
+    let ptrIdx, clkIdx;
 
-    // First pass: find pointing hands
-    const pointing = hands.map((h, i) => isPointing(h.landmarks) ? i : -1).filter(i => i >= 0);
-
-    if (pointing.length >= 1) {
-      // First pointing hand = pointer
-      pointerIdx = pointing[0];
-      // If there's another hand that's NOT pointing, it's the clicker
-      for (let i = 0; i < hands.length; i++) {
-        if (i !== pointerIdx) { clickerIdx = i; break; }
-      }
+    if (pinchingIdx >= 0) {
+      // One hand is pinching: it's the clicker, find another hand for pointer
+      clkIdx = pinchingIdx;
+      ptrIdx = hands.findIndex((h, i) => i !== pinchingIdx && isPointing(h.landmarks));
+      if (ptrIdx < 0) ptrIdx = hands.findIndex((h, i) => i !== pinchingIdx); // any other hand
+      if (ptrIdx < 0) ptrIdx = pinchingIdx; // only one hand, does both
+    } else {
+      // No hand pinching: first pointing hand = pointer, other = clicker (or same)
+      ptrIdx = hands.findIndex(h => isPointing(h.landmarks));
+      if (ptrIdx < 0) ptrIdx = 0;
+      clkIdx = hands.length > 1 ? (ptrIdx === 0 ? 1 : 0) : ptrIdx;
     }
-    // If no pointing hand found, use first hand as both
-    if (pointerIdx < 0) {
-      pointerIdx = 0;
-      clickerIdx = hands.length > 1 ? 1 : 0;
-    }
-    // If no separate clicker, pointer hand also does clicking
-    if (clickerIdx < 0) clickerIdx = pointerIdx;
 
-    this.pointerData = hands[pointerIdx];
-    this.clickerData = hands[clickerIdx];
-    this.pointerPx = toCanvas(hands[pointerIdx].pointer, this.engine.c.clientWidth, this.engine.c.clientHeight);
-    this.pinchNow = hands[clickerIdx].pinchDist < PINCH_CLOSE;
+    this.pointerHand = hands[ptrIdx];
+    this.clickerHand = hands[clkIdx];
+    this.pointerPx = toCanvas(hands[ptrIdx].pointer, this.engine.c.clientWidth, this.engine.c.clientHeight);
+    this.pinchNow = hands[clkIdx].pinchDist < PINCH_CLOSE;
 
     // FSM on clicker hand
-    const fsmR = this.fsm.update(hands[clickerIdx].pinchDist, performance.now());
+    const fsmR = this.fsm.update(hands[clkIdx].pinchDist, performance.now());
     this._handleClick(fsmR);
 
-    // UI hit test from pointer position
-    const el = document.elementFromPoint(this.pointerPx.x, this.pointerPx.y);
+    // Update gesture label
+    const ptrLabel = ptrIdx === clkIdx ? '1 hand' : '2 hands';
+    $('gestureLabel').textContent = ptrLabel + ' | ' + (this.pinchNow ? '✊ pinching' : '✋ open');
+  }
+
+  _handleClick(fsmR) {
+    if (!this.pointerPx) return;
+    const px = this.pointerPx;
+    const el = document.elementFromPoint(px.x, px.y);
     const target = el?.closest('[data-hand]') || el?.closest('.tool-btn') || null;
 
-    // UI interaction: pinch over button = click
+    // UI click
     if (fsmR.event === 'press' && target) {
       target.classList.add('hand-press'); this.pressTarget = target;
     }
     if (fsmR.event === 'release' && this.pressTarget) {
       const t = this.pressTarget; t.classList.remove('hand-press');
-      if (target === t) { t.classList.add('hand-click'); t.addEventListener('animationend', () => t.classList.remove('hand-click'), { once: true }); t.click(); }
+      const rect = t.getBoundingClientRect();
+      if (px && px.x >= rect.left - 40 && px.x <= rect.right + 40 && px.y >= rect.top - 40 && px.y <= rect.bottom + 40) {
+        t.classList.add('hand-click'); t.addEventListener('animationend', () => t.classList.remove('hand-click'), { once: true }); t.click();
+      }
       this.pressTarget = null;
     }
     if (fsmR.event === 'cancel') { if (this.pressTarget) { this.pressTarget.classList.remove('hand-press'); this.pressTarget = null; } }
 
-    // Canvas interaction: pinch = draw (only if NOT over UI)
+    // Canvas draw (only when NOT over UI)
     if (!target && !this.pressTarget) {
       if (fsmR.event === 'press') {
         if (activeTool === 'fill') {
           this.engine.clear();
-          const fctx = this.engine.pctx;
-          fctx.fillStyle = COLORS[colorIdx];
-          fctx.fillRect(0, 0, this.engine.paint.width, this.engine.paint.height);
+          this.engine.pctx.fillStyle = COLORS[colorIdx];
+          this.engine.pctx.fillRect(0, 0, this.engine.paint.width, this.engine.paint.height);
         } else {
           this.engine.setColor(COLORS[colorIdx]);
-          this.engine.start(this.pointerPx); this.drawing = true;
+          this.engine.start(px); this.drawing = true;
         }
       } else if (this.drawing && this.pinchNow) {
-        this.engine.move(this.pointerPx);
+        this.engine.move(px);
       } else if (this.drawing && !this.pinchNow) {
         this.engine.end(); this.drawing = false;
       }
     }
-
-    $('gestureLabel').textContent = (pointerIdx === clickerIdx ? '1 hand (both)' : '2 hands') + ' | ' + (this.pinchNow ? '✊' : '✋');
   }
 }
 
