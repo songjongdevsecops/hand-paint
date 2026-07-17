@@ -66,6 +66,11 @@ class App {
     $('camOpacity').oninput = e => { this.engine.camAlpha = +e.target.value; $('camOpacityVal').textContent = Math.round(+e.target.value * 100) + '%'; };
     $('btnClear').onclick = () => this.engine.clear();
     $('btnSave').onclick = () => this.engine.download();
+    $('btnSizeUp').onclick = () => this.engine.setSize(this.engine.brush.size + 1);
+    $('btnSizeUp').addEventListener('mousedown', e => { e.preventDefault(); const rpt = setInterval(() => this.engine.setSize(this.engine.brush.size + 1), 80); const up = () => { clearInterval(rpt); document.removeEventListener('mouseup', up); }; document.addEventListener('mouseup', up); });
+    $('btnSizeDown').onclick = () => this.engine.setSize(this.engine.brush.size - 1);
+    $('btnSizeDown').addEventListener('mousedown', e => { e.preventDefault(); const rpt = setInterval(() => this.engine.setSize(this.engine.brush.size - 1), 80); const up = () => { clearInterval(rpt); document.removeEventListener('mouseup', up); }; document.addEventListener('mouseup', up); });
+    this._initHandCursor();
   }
 
   _render() {
@@ -169,6 +174,37 @@ class App {
     g.querySelectorAll('.active').forEach(el => el.classList.remove('active'));
     const swatch = g.querySelector(`[data-i="${colorIdx}"]`);
     if (swatch) swatch.classList.add('active');
+  }
+
+  _initHandCursor() {
+    const cursor = $('handCursor');
+    document.addEventListener('mousemove', (e) => {
+      document.querySelectorAll('.hand-hover,.hand-press').forEach(el => el.classList.remove('hand-hover','hand-press'));
+      const target = e.target.closest('[data-hand]');
+      if (!target) { cursor.classList.add('hidden'); cursor.classList.remove('hover','pressed'); return; }
+      cursor.classList.remove('hidden');
+      target.classList.add('hand-hover');
+      const rect = target.getBoundingClientRect();
+      cursor.style.left = rect.left + rect.width / 2 + 'px';
+      cursor.style.top = rect.top + rect.height / 2 + 'px';
+    });
+    document.addEventListener('mousedown', (e) => {
+      const target = e.target.closest('[data-hand]');
+      if (!target) return;
+      target.classList.remove('hand-hover');
+      target.classList.add('hand-press');
+      cursor.classList.add('pressed');
+    });
+    document.addEventListener('mouseup', (e) => {
+      document.querySelectorAll('.hand-press').forEach(el => {
+        el.classList.remove('hand-press');
+        el.classList.add('hand-click');
+        el.addEventListener('animationend', () => el.classList.remove('hand-click'), { once: true });
+      });
+      cursor.classList.remove('pressed');
+      cursor.classList.add('clicked');
+      cursor.addEventListener('animationend', () => cursor.classList.remove('clicked'), { once: true });
+    });
   }
 }
 

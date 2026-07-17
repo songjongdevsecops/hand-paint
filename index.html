@@ -10,6 +10,7 @@
 
   <video id="webcam" autoplay playsinline muted></video>
   <canvas id="canvas"></canvas>
+  <div id="handCursor" class="hidden" aria-hidden="true"></div>
 
   <div id="hud">
     <div id="brushPreview"><div id="brushDot"></div><span id="brushSize">8px</span></div>
@@ -24,8 +25,10 @@
   <div id="statusBar"><span id="fps">--</span></div>
 
   <div id="actions">
-    <button id="btnClear" title="Clear">🗑</button>
-    <button id="btnSave" title="Save PNG">💾</button>
+    <button id="btnSizeUp"   data-hand title="Brush +">➕</button>
+    <button id="btnSizeDown" data-hand title="Brush −">➖</button>
+    <button id="btnClear" data-hand title="Clear">🗑</button>
+    <button id="btnSave" data-hand title="Save PNG">💾</button>
   </div>
 
   <div id="palette">
@@ -33,7 +36,7 @@
   </div>
 
   <div id="legend">
-    <span>☝️Paint</span> <span>🖐Clear</span> <span>✌️Next</span> <span>🤟Prev</span> <span>👎Undo</span> <span>👍Redo</span> <span>🤏Size</span>
+    <span>☝️Paint</span> <span>🖐Clear</span> <span>✌️Next</span> <span>🤟Prev</span> <span>👎Undo</span> <span>👍Redo</span> <span>🤏Click UI</span><span>➕➖Brush</span>
   </div>
 
   <div id="loading">

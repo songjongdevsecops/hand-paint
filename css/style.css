@@ -48,3 +48,25 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:sys
   #actions{bottom:12px;right:8px;gap:6px}
   #actions button{width:38px;height:38px;font-size:16px}
 }
+
+/* Hand cursor */
+#handCursor{position:fixed;z-index:50;pointer-events:none;width:28px;height:28px;border-radius:50%;border:3px solid #ff1493;background:rgba(255,20,147,.15);transform:translate(-50%,-50%);transition:transform .1s ease-out,opacity .15s,border-color .15s,background .15s;display:block}
+#handCursor.hidden{opacity:0;pointer-events:none}
+#handCursor::after{content:'';position:absolute;top:50%;left:50%;width:6px;height:6px;background:#fff;border-radius:50%;transform:translate(-50%,-50%)}
+#handCursor.hover{transform:translate(-50%,-50%) scale(1.25);background:rgba(255,20,147,.25)}
+#handCursor.pressed{transform:translate(-50%,-50%) scale(.7);background:#ff149380;border-color:#fff}
+#handCursor.clicked{animation:cursorRipple .3s ease-out}
+@keyframes cursorRipple{0%{box-shadow:0 0 0 0 #ff149380}100%{box-shadow:0 0 0 20px #ff149300}}
+
+/* Hand hover/press/click classes for interactive elements */
+.hand-hover{background:#ff149330!important;border-color:#ff1493!important;transform:scale(1.12)!important}
+.hand-press{transform:scale(.88)!important;background:#ff1493!important;color:#fff!important}
+.hand-click{animation:btnPop .25s ease-out}
+@keyframes btnPop{0%{transform:scale(.88)}50%{transform:scale(1.15)}100%{transform:scale(1)}}
+
+/* colorGrid hand overrides */
+#colorGrid div.hand-hover{transform:scale(1.3)!important}
+#colorGrid div.hand-press{transform:scale(.7)!important}
+
+/* actions button hand overrides */
+#actions button.hand-hover{background:#ff149330!important;border-color:#ff1493!important;transform:scale(1.15)!important}
