@@ -3,6 +3,7 @@
 import { HandTracker } from './handTracking.js';
 import { PaintEngine } from './canvas.js';
 import { toCanvas } from './gestures.js';
+import { PinchClickFSM, withinSlop, SLOP_PX } from './interaction.js';
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#ff1493','#fff','#f00','#f80','#fd0','#0f0','#0ff','#08f','#00f','#80f','#f0f','#808080','#000'];
@@ -13,7 +14,7 @@ class Stabilizer {
   update(raw) {
     if (raw === this.s) { this.exit = 0; this.entry = null; this.ec = 0; return this.s; }
     this.exit++;
-    if (['paint','pinch'].includes(this.s) && this.exit < 10) return this.s;
+    if (['paint'].includes(this.s) && this.exit < 10) return this.s;
     if (this.s === 'paint' && raw === 'none' && this.exit < 16) return this.s;
     if (['clear','undo','redo','nextColor','prevColor'].includes(raw)) {
       if (this.entry !== raw) { this.entry = raw; this.ec = 1; }
@@ -30,8 +31,8 @@ class App {
     this.tracker = new HandTracker();
     this.engine = null;
     this.stab = new Stabilizer();
+    this.fsm = new PinchClickFSM(); this.pressTarget = null; this.uiMode = false;
     this.drawing = false; this.lost = 0; this.lastPos = null;
-    this.pinchOn = false; this.pinchY0 = 0; this.pinchBase = 8;
     this.clearLast = 0; this.undoLast = 0; this.redoLast = 0; this.colorLast = 0;
   }
 
@@ -86,16 +87,45 @@ class App {
       if (this.lost <= 25) { if (this.drawing && this.lastPos) this.engine.move(this.lastPos); $('gestureLabel').textContent = 'Lost ' + (25 - this.lost + 1); return; }
       $('gestureLabel').textContent = 'Searching...';
       if (this.drawing) { this.engine.end(); this.drawing = false; }
-      this.stab.reset(); this.pinchOn = false; return;
+      this.stab.reset(); this.fsm.reset(); $('handCursor').classList.add('hidden'); this.pressTarget = null; return;
     }
     this.lost = 0;
     const rawType = hand.gesture;
-    // Custom pinch
-    const it = hand.landmarks[8], tt = hand.landmarks[4];
-    const pinching = Math.hypot(it.x - tt.x, it.y - tt.y) < 0.05;
-    const type = pinching ? 'pinch' : rawType;
-    const st = this.stab.update(type);
-    this._act(st, hand, ts);
+
+    // Hand cursor tracking (after hand is valid)
+    const cursorPx = hand.cursor ? {
+      x: (1 - hand.cursor.x) * window.innerWidth,
+      y: hand.cursor.y * window.innerHeight
+    } : null;
+
+    // Hit-test UI elements
+    let target = null;
+    if (cursorPx) {
+      const el = document.elementFromPoint(cursorPx.x, cursorPx.y);
+      target = el?.closest('[data-hand]') || null;
+    }
+
+    // UI mode: finger over button OR press is captured
+    this.uiMode = (target !== null || this.pressTarget !== null);
+
+    if (this.uiMode) {
+      // UI interaction mode
+      if (this.drawing) { this.engine.end(); this.drawing = false; }
+
+      const fsmResult = this.fsm.update(hand.pinchDist, ts);
+      this._handleUI(cursorPx, target, fsmResult, ts);
+
+      // Skip gesture pipeline when in UI mode
+      this.stab.reset();
+      $('gestureLabel').textContent = '🖱 UI';
+      $('gestureLabel').style.color = '#0bf';
+    } else {
+      // Painting mode — hide cursor, run normal gesture pipeline
+      $('handCursor').classList.add('hidden');
+      this.pressTarget = null;
+      const st = this.stab.update(rawType);
+      this._act(st, hand, ts);
+    }
   }
 
   _act(type, hand, ts) {
@@ -104,9 +134,6 @@ class App {
       case 'paint':
         this._paint(hand.landmarks[8]);
         $('gestureLabel').textContent = '☝️ Paint'; break;
-      case 'pinch':
-        this._pinch(hand.landmarks[0]);
-        $('gestureLabel').textContent = '🤏 ' + Math.round(this.engine.brush.size) + 'px'; break;
       case 'clear':
         if (this.drawing) { this.engine.end(); this.drawing = false; }
         if (ts - this.clearLast > 2000) { this.engine.clear(); this.clearLast = ts; $('gestureLabel').textContent = '🖐 Cleared!'; }
@@ -131,30 +158,79 @@ class App {
         if (this.drawing) { this.engine.end(); this.drawing = false; }
         $('gestureLabel').textContent = '···'; $('gestureLabel').style.color = '#888';
     }
-    if (type !== 'pinch') this.pinchOn = false;
   }
 
   _paint(pos) {
     if (!pos) return;
     const p = toCanvas(pos, this.engine.c.clientWidth, this.engine.c.clientHeight);
-    this.lastPos = p; this.pinchOn = false;
+    this.lastPos = p;
     if (!this.drawing) { this.engine.start(p); this.drawing = true; }
     else this.engine.move(p);
   }
 
-  _pinch(pos) {
-    if (this.drawing) { this.engine.end(); this.drawing = false; }
-    if (!pos) return;
-    const y = pos.y; // 0=top, 1=bottom
-    // Upper 1/3 = increase, lower 1/3 = decrease, middle = hold
-    if (y < 0.33) {
-      // Holding up: ramp up continuously
-      this.engine.setSize(this.engine.brush.size + 0.5);
-    } else if (y > 0.66) {
-      // Holding down: ramp down continuously
-      this.engine.setSize(this.engine.brush.size - 0.5);
+  _handleUI(cursorPx, target, fsmResult, ts) {
+    const cursor = $('handCursor');
+
+    // Position cursor
+    if (cursorPx) {
+      cursor.style.left = cursorPx.x + 'px';
+      cursor.style.top = cursorPx.y + 'px';
+      cursor.classList.remove('hidden');
     }
-    // Middle: hold current size
+
+    // Clear previous hover
+    document.querySelectorAll('.hand-hover').forEach(el => {
+      if (el !== target) el.classList.remove('hand-hover');
+    });
+
+    // Hover state
+    if (target && !this.pressTarget) {
+      target.classList.add('hand-hover');
+      cursor.classList.add('hover');
+      cursor.classList.remove('pressed');
+    }
+
+    // Press event
+    if (fsmResult.event === 'press' && target) {
+      this.pressTarget = target;
+      target.classList.remove('hand-hover');
+      target.classList.add('hand-press');
+      cursor.classList.remove('hover');
+      cursor.classList.add('pressed');
+    }
+
+    // Release event
+    if (fsmResult.event === 'release' && this.pressTarget) {
+      const pressed = this.pressTarget;
+      const rect = pressed.getBoundingClientRect();
+      const slopOk = cursorPx && withinSlop(
+        { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
+        cursorPx, SLOP_PX
+      );
+
+      pressed.classList.remove('hand-press');
+      cursor.classList.remove('pressed');
+
+      if (slopOk) {
+        pressed.classList.add('hand-click');
+        pressed.addEventListener('animationend', () => pressed.classList.remove('hand-click'), { once: true });
+        cursor.classList.add('clicked');
+        cursor.addEventListener('animationend', () => cursor.classList.remove('clicked'), { once: true });
+        pressed.click(); // Fire click event
+      }
+
+      this.pressTarget = null;
+    }
+
+    // Cancel (hand lost during press)
+    if (fsmResult.event === 'cancel') {
+      if (this.pressTarget) {
+        this.pressTarget.classList.remove('hand-press');
+        this.pressTarget = null;
+      }
+      cursor.classList.remove('pressed', 'hover');
+      cursor.classList.add('hidden');
+    }
   }
 
   _nextColor() {
