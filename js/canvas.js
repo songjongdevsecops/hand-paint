@@ -6,7 +6,7 @@ export class PaintEngine {
     this.ctx = canvas.getContext('2d', { desynchronized: true });
     this.paint = document.createElement('canvas');
     this.pctx = this.paint.getContext('2d', { alpha: true });
-    this.brush = { color: '#ff1493', size: 8, mode: 'draw' };
+    this.brush = { color: '#ff1493', size: 18, mode: 'draw' };
     this.drawing = false;
     this.history = []; this.hidx = -1;
     this.camAlpha = 0.10;
@@ -41,7 +41,7 @@ export class PaintEngine {
   redo() { if (this.hidx >= this.history.length - 1) return false; this.hidx++; const s = this.history[this.hidx]; this.pctx.putImageData(s.d, 0, 0); this.brush = { ...s.b }; return true; }
   clear() { this._save(); this.pctx.clearRect(0, 0, this.paint.width, this.paint.height); }
   setColor(c) { this.brush.color = c; }
-  setSize(s) { this.brush.size = Math.max(2, Math.min(60, s)); document.getElementById('brushSize').textContent = Math.round(s) + 'px'; }
+  setSize(s) { this.brush.size = Math.max(2, Math.min(60, s)); }
   getSize() { return this.brush.size; }
   setMode(m) { this.brush.mode = m; }
 

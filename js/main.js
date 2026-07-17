@@ -66,8 +66,6 @@ class App {
     $('btnUndo').onclick = () => this.engine.undo();
     $('btnClear').onclick = () => this.engine.clear();
     $('btnSave').onclick = () => this.engine.download();
-    $('btnSizeUp').onclick = () => this.engine.setSize(this.engine.brush.size + 2);
-    $('btnSizeDown').onclick = () => this.engine.setSize(this.engine.brush.size - 2);
     $('camOpacity').oninput = e => { this.engine.camAlpha = +e.target.value; $('camOpacityVal').textContent = Math.round(+e.target.value * 100) + '%'; };
   }
 
