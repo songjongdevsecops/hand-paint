@@ -11,9 +11,12 @@ let colorIdx = 0, activeTool = 'brush';
 
 function isPointing(lm) {
   if (!lm || lm.length < 21) return false;
+  // Check if index finger is above PIP in screen space (Y axis)
+  if (lm[8].y < lm[6].y - 0.01) return true;
+  // Fallback: distance from wrist
   const wt = Math.hypot(lm[0].x - lm[8].x, lm[0].y - lm[8].y);
   const wp = Math.hypot(lm[0].x - lm[6].x, lm[0].y - lm[6].y);
-  return wt > wp * 1.05;
+  return wt > wp * 1.03;
 }
 
 class App {
