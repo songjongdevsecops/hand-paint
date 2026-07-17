@@ -74,9 +74,9 @@ class App {
   _render() {
     this.engine.frame();
     $('fps').textContent = this.tracker.fps + ' fps';
-    // Position mouse cursor DOM element (above all UI, z-index 999)
+    // Mouse cursor: always visible when pointer hand is detected
     const mc = $('mouseCursor');
-    if (this.pointerPx) {
+    if (this.pointerPx && this.pointerHand) {
       mc.style.left = this.pointerPx.x + 'px';
       mc.style.top = this.pointerPx.y + 'px';
       mc.style.display = 'block';
@@ -119,7 +119,12 @@ class App {
 
     this.pointerHand = hands[ptrIdx];
     this.clickerHand = hands[clkIdx];
-    this.pointerPx = toCanvas(hands[ptrIdx].pointer, this.engine.c.clientWidth, this.engine.c.clientHeight);
+    // Only show cursor when pointer hand IS pointing
+    if (isPointing(hands[ptrIdx].landmarks)) {
+      this.pointerPx = toCanvas(hands[ptrIdx].pointer, this.engine.c.clientWidth, this.engine.c.clientHeight);
+    } else {
+      this.pointerPx = null;
+    }
     this.pinchNow = hands[clkIdx].pinchDist < PINCH_CLOSE;
 
     // FSM on clicker hand
