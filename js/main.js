@@ -74,16 +74,15 @@ class App {
   _render() {
     this.engine.frame();
     $('fps').textContent = this.tracker.fps + ' fps';
-    // Draw mouse cursor at pointer position
+    // Position mouse cursor DOM element (above all UI, z-index 999)
+    const mc = $('mouseCursor');
     if (this.pointerPx) {
-      const ctx = this.engine.ctx, x = this.pointerPx.x, y = this.pointerPx.y;
-      // Cursor shadow
-      ctx.fillStyle = '#00000080';
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 16, y + 12); ctx.lineTo(x + 10, y + 16); ctx.lineTo(x + 12, y + 22); ctx.lineTo(x + 4, y + 20); ctx.lineTo(x, y + 28); ctx.closePath(); ctx.fill();
-      // Cursor body (arrow)
-      ctx.fillStyle = this.pinchNow ? '#ff1493' : '#fff';
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 14, y + 10); ctx.lineTo(x + 9, y + 14); ctx.lineTo(x + 10, y + 19); ctx.lineTo(x + 3, y + 17); ctx.lineTo(x, y + 24); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
+      mc.style.left = this.pointerPx.x + 'px';
+      mc.style.top = this.pointerPx.y + 'px';
+      mc.style.display = 'block';
+      mc.classList.toggle('pinching', this.pinchNow);
+    } else {
+      mc.style.display = 'none';
     }
     requestAnimationFrame(() => this._render());
   }
